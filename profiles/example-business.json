@@ -1,0 +1,18 @@
+{
+  "name": "Example Business",
+  "description": "A small organization using local AI to improve operations without giving up control of its data.",
+  "audience": [
+    "small businesses that need practical AI automation",
+    "teams that want privacy-conscious local AI systems"
+  ],
+  "offers": [
+    "AI automation",
+    "custom software",
+    "self-hosted workflows"
+  ],
+  "voice": "direct, technically credible, privacy-conscious, practical",
+  "approval_required": true,
+  "repo_paths": [
+    "."
+  ]
+}

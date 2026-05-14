@@ -1,0 +1,33 @@
+/dist/
+/tmp/
+/.cache/
+/node_modules/
+.env
+.env.*
+!.env.example
+*.test
+coverage.out
+*.log
+*.pid
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Local runtime state should stay outside git.
+*.db
+*.db-shm
+*.db-wal
+events.jsonl
+tasks.jsonl
+metrics.jsonl
+config.json
+
+# Local credentials and machine/editor noise.
+*.key
+*.pem
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp

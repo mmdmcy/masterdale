@@ -1,0 +1,1169 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Masterdale Dashboard</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #f6f7f8;
+      --surface: #ffffff;
+      --surface-2: #f0f2f5;
+      --sidebar: #eef0f3;
+      --sidebar-active: #e1e5ea;
+      --line: #d8dde5;
+      --text: #1f2328;
+      --muted: #66707c;
+      --soft: #89929f;
+      --accent: #2f6fd6;
+      --accent-soft: #e8f1ff;
+      --ok: #1f7a4d;
+      --warn: #8a6400;
+      --bad: #b42318;
+      --shadow: 0 18px 50px rgba(27, 31, 36, 0.10);
+      --radius: 8px;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #101112;
+        --surface: #171819;
+        --surface-2: #202225;
+        --sidebar: #15171a;
+        --sidebar-active: #22262b;
+        --line: #30343a;
+        --text: #f1f3f5;
+        --muted: #a4abb4;
+        --soft: #7f8791;
+        --accent: #74a7ff;
+        --accent-soft: #16243a;
+        --ok: #75d597;
+        --warn: #e1bd5d;
+        --bad: #ff8f87;
+        --shadow: 0 18px 50px rgba(0, 0, 0, 0.24);
+      }
+    }
+
+    * { box-sizing: border-box; }
+    html { height: 100%; }
+    body {
+      margin: 0;
+      height: 100%;
+      min-height: 100vh;
+      background: var(--bg);
+      color: var(--text);
+      overflow: hidden;
+    }
+    button, textarea, select {
+      font: inherit;
+    }
+    button, select {
+      cursor: pointer;
+    }
+    .app {
+      display: grid;
+      grid-template-columns: 292px minmax(0, 1fr);
+      height: 100vh;
+      min-height: 0;
+    }
+    .sidebar {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      min-height: 0;
+      padding: 14px 10px;
+      background: var(--sidebar);
+      border-right: 1px solid var(--line);
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-height: 38px;
+      padding: 0 8px;
+    }
+    .brand-mark {
+      width: 24px;
+      height: 24px;
+      border-radius: 6px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex: 0 0 24px;
+      color: #fff;
+      background: linear-gradient(135deg, #2f6fd6, #2f8f6d);
+      font-size: 12px;
+      font-weight: 750;
+    }
+    .brand-copy {
+      min-width: 0;
+    }
+    .brand-copy strong {
+      display: block;
+      font-size: 14px;
+      line-height: 1.2;
+    }
+    .brand-copy span {
+      display: block;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.2;
+    }
+    .nav {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+    .nav-button, .history-item {
+      width: 100%;
+      border: 0;
+      border-radius: var(--radius);
+      background: transparent;
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      min-height: 36px;
+      padding: 8px 10px;
+      text-align: left;
+    }
+    .nav-button:hover, .history-item:hover, .history-item.active {
+      background: var(--sidebar-active);
+    }
+    .nav-button.primary {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      box-shadow: 0 1px 0 rgba(27, 31, 36, 0.04);
+    }
+    .nav-icon {
+      width: 18px;
+      height: 18px;
+      border-radius: 5px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex: 0 0 18px;
+      color: var(--muted);
+      border: 1px solid var(--line);
+      font-size: 12px;
+      font-weight: 700;
+    }
+    .section-label {
+      padding: 0 8px;
+      color: var(--soft);
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+    .history {
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+      min-height: 0;
+      flex: 1;
+    }
+    .history-list {
+      min-height: 0;
+      overflow: auto;
+      padding-right: 2px;
+    }
+    .history-item {
+      align-items: flex-start;
+      flex-direction: column;
+      gap: 3px;
+      min-height: 54px;
+    }
+    .history-title {
+      width: 100%;
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+      font-size: 14px;
+      line-height: 1.25;
+    }
+    .history-meta {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.25;
+    }
+    .empty-history {
+      padding: 8px 10px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.4;
+    }
+    .sidebar-footer {
+      display: grid;
+      gap: 7px;
+      padding: 9px 8px 2px;
+      color: var(--muted);
+      font-size: 12px;
+      border-top: 1px solid var(--line);
+    }
+    .main {
+      display: grid;
+      grid-template-rows: 54px minmax(0, 1fr);
+      min-width: 0;
+      min-height: 0;
+      height: 100vh;
+    }
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      min-width: 0;
+      padding: 0 24px;
+      border-bottom: 1px solid var(--line);
+      background: color-mix(in srgb, var(--surface) 88%, transparent);
+    }
+    .topbar-title {
+      min-width: 0;
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+    }
+    .topbar-title strong {
+      font-size: 14px;
+      font-weight: 700;
+    }
+    .topbar-title span {
+      color: var(--muted);
+      font-size: 13px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .top-actions {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      color: var(--muted);
+      font-size: 13px;
+      white-space: nowrap;
+    }
+    .live-status {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      color: var(--ok);
+      font-weight: 650;
+    }
+    .live-status::before {
+      content: "";
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: currentColor;
+      box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 18%, transparent);
+    }
+    .live-status.warn {
+      color: var(--warn);
+    }
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      display: inline-block;
+      background: var(--ok);
+      box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 18%, transparent);
+    }
+    .chat-shell {
+      min-height: 0;
+      overflow: auto;
+      padding: clamp(22px, 6vh, 58px) 24px 24px;
+    }
+    .chat-column {
+      width: min(880px, 100%);
+      min-height: calc(100vh - 132px);
+      margin: 0 auto;
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr) auto;
+      gap: 18px;
+    }
+    .chat-column.is-empty {
+      grid-template-rows: auto auto;
+      align-content: center;
+      padding-bottom: clamp(18px, 8vh, 76px);
+    }
+    .intro {
+      display: grid;
+      justify-items: center;
+      gap: 10px;
+      padding-top: clamp(10px, 5vh, 56px);
+      text-align: center;
+    }
+    .chat-column.is-empty .intro {
+      padding-top: 0;
+    }
+    .intro[hidden] { display: none; }
+    .intro-mark {
+      width: 34px;
+      height: 34px;
+      border-radius: 10px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      background: linear-gradient(135deg, #2f6fd6, #2f8f6d);
+      font-weight: 800;
+    }
+    .intro h1 {
+      margin: 0;
+      font-size: clamp(28px, 4vw, 42px);
+      line-height: 1.1;
+      font-weight: 650;
+      letter-spacing: 0;
+    }
+    .intro p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 14px;
+    }
+    .messages {
+      min-height: 180px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      overflow: visible;
+    }
+    .messages:empty {
+      min-height: clamp(24px, 5vh, 70px);
+    }
+    .chat-column.is-empty .messages {
+      display: none;
+    }
+    .message {
+      width: fit-content;
+      max-width: min(760px, 92%);
+      border-radius: var(--radius);
+      padding: 12px 14px;
+      font-size: 15px;
+      line-height: 1.55;
+      overflow-wrap: anywhere;
+    }
+    .message.user {
+      align-self: flex-end;
+      color: var(--text);
+      background: var(--accent-soft);
+      border: 1px solid color-mix(in srgb, var(--accent) 24%, var(--line));
+    }
+    .message.agent {
+      align-self: flex-start;
+      color: var(--text);
+      background: var(--surface);
+      border: 1px solid var(--line);
+      box-shadow: 0 1px 0 rgba(27, 31, 36, 0.04);
+    }
+    .message.pending {
+      color: var(--muted);
+    }
+    .message.error {
+      border-color: color-mix(in srgb, var(--bad) 42%, var(--line));
+      color: var(--bad);
+    }
+    .message.agent > :first-child { margin-top: 0; }
+    .message.agent > :last-child { margin-bottom: 0; }
+    .message.agent p {
+      margin: 0 0 10px;
+    }
+    .message.agent h1, .message.agent h2, .message.agent h3 {
+      margin: 16px 0 8px;
+      line-height: 1.2;
+      font-weight: 700;
+      letter-spacing: 0;
+    }
+    .message.agent h1 { font-size: 20px; }
+    .message.agent h2 { font-size: 18px; }
+    .message.agent h3 { font-size: 16px; }
+    .message.agent ul, .message.agent ol {
+      margin: 8px 0 12px;
+      padding-left: 22px;
+    }
+    .message.agent li {
+      margin: 4px 0;
+    }
+    .message.agent blockquote {
+      margin: 10px 0;
+      padding: 1px 0 1px 12px;
+      border-left: 3px solid var(--line);
+      color: var(--muted);
+    }
+    .message.agent pre {
+      margin: 10px 0;
+      padding: 12px;
+      overflow: auto;
+      border-radius: var(--radius);
+      background: var(--surface-2);
+      border: 1px solid var(--line);
+    }
+    .message.agent code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.92em;
+      border-radius: 5px;
+      background: var(--surface-2);
+      padding: 1px 4px;
+    }
+    .message.agent pre code {
+      background: transparent;
+      padding: 0;
+      border-radius: 0;
+    }
+    .message.agent a {
+      color: var(--accent);
+      text-decoration: none;
+    }
+    .message.agent a:hover {
+      text-decoration: underline;
+    }
+    .composer {
+      display: grid;
+      gap: 8px;
+      padding: 10px 12px;
+      border-radius: 14px;
+      border: 1px solid var(--line);
+      background: var(--surface);
+      box-shadow: var(--shadow);
+    }
+    .chat-column.is-empty .composer {
+      gap: 10px;
+      padding: 14px;
+      border-radius: 16px;
+    }
+    .composer textarea {
+      width: 100%;
+      min-height: 32px;
+      max-height: 180px;
+      resize: none;
+      border: 0;
+      outline: 0;
+      background: transparent;
+      color: var(--text);
+      line-height: 1.45;
+      font-size: 16px;
+    }
+    .chat-column.is-empty .composer textarea {
+      min-height: 68px;
+    }
+    .composer textarea::placeholder {
+      color: var(--soft);
+    }
+    .composer-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      min-width: 0;
+    }
+    .composer-context {
+      min-width: 0;
+      color: var(--muted);
+      font-size: 12px;
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
+    .composer-controls {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      flex: 0 0 auto;
+    }
+    .composer select {
+      max-width: 128px;
+      height: 34px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--surface-2);
+      color: var(--text);
+      padding: 0 8px;
+      outline: 0;
+      font-size: 13px;
+    }
+    .send-button {
+      height: 34px;
+      border: 0;
+      border-radius: var(--radius);
+      background: var(--text);
+      color: var(--surface);
+      min-width: 64px;
+      padding: 0 12px;
+      font-weight: 650;
+    }
+    .send-button:disabled {
+      opacity: 0.55;
+      cursor: wait;
+    }
+    .context-panel {
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: color-mix(in srgb, var(--surface) 72%, transparent);
+      overflow: hidden;
+    }
+    .context-panel summary {
+      min-height: 40px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 0 10px;
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 13px;
+      list-style: none;
+    }
+    .context-panel summary::-webkit-details-marker {
+      display: none;
+    }
+    .context-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 8px;
+      max-height: 210px;
+      overflow: auto;
+      padding: 2px 10px 10px;
+    }
+    .context-group {
+      min-width: 0;
+      display: grid;
+      align-content: start;
+      gap: 6px;
+    }
+    .context-title {
+      color: var(--soft);
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+    .context-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 8px;
+      align-items: start;
+      min-height: 24px;
+      color: var(--text);
+      font-size: 13px;
+    }
+    .context-row span:first-child {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .context-detail {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.3;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .pill {
+      border-radius: 999px;
+      padding: 2px 8px;
+      min-height: 22px;
+      display: inline-flex;
+      align-items: center;
+      color: var(--muted);
+      background: var(--surface-2);
+      border: 1px solid var(--line);
+      font-size: 12px;
+      white-space: nowrap;
+    }
+    .pill.ok { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 35%, var(--line)); }
+    .pill.warn { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 35%, var(--line)); }
+    .pill.bad { color: var(--bad); border-color: color-mix(in srgb, var(--bad) 35%, var(--line)); }
+
+    @media (max-width: 920px) {
+      body { overflow: auto; }
+      .app {
+        grid-template-columns: 1fr;
+        height: auto;
+        min-height: 100vh;
+      }
+      .sidebar {
+        max-height: 360px;
+        border-right: 0;
+        border-bottom: 1px solid var(--line);
+      }
+      .main {
+        height: auto;
+        min-height: calc(100vh - 260px);
+      }
+      .chat-shell {
+        overflow: visible;
+        padding: 22px 16px;
+      }
+      .chat-column {
+        min-height: auto;
+      }
+      .context-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 620px) {
+      .topbar {
+        padding: 0 14px;
+      }
+      .topbar-title #nodeName {
+        display: none;
+      }
+      .composer-footer {
+        align-items: stretch;
+        flex-direction: column;
+      }
+      .composer-context {
+        white-space: normal;
+      }
+      .composer-controls {
+        width: 100%;
+      }
+      .composer select, .send-button {
+        flex: 1;
+      }
+      .message {
+        max-width: 100%;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="brand">
+        <span class="brand-mark">M</span>
+        <span class="brand-copy">
+          <strong id="brandTitle">local node</strong>
+          <span id="profileText">local ops</span>
+        </span>
+      </div>
+      <details class="context-panel">
+        <summary>
+          <span>Live context</span>
+          <span class="pill" id="contextPill">loading</span>
+        </summary>
+        <div class="context-grid">
+          <section class="context-group">
+            <div class="context-title">Next</div>
+            <div id="actionsList"></div>
+          </section>
+          <section class="context-group">
+            <div class="context-title">Git</div>
+            <div id="gitList"></div>
+          </section>
+          <section class="context-group">
+            <div class="context-title">Fleet</div>
+            <div id="fleetList"></div>
+          </section>
+        </div>
+      </details>
+      <nav class="nav" aria-label="Dashboard">
+        <button class="nav-button primary" id="newChatButton" type="button"><span class="nav-icon">+</span>New chat</button>
+      </nav>
+      <section class="history" aria-label="Chat history">
+        <div class="section-label">History</div>
+        <div class="history-list" id="chatHistory"></div>
+      </section>
+      <div class="sidebar-footer">
+        <span id="sideNode">local node</span>
+        <span id="sideStatus">loading</span>
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div class="topbar-title">
+          <span class="status-dot" aria-hidden="true"></span>
+          <strong>Dashboard</strong>
+          <span id="nodeName">local node</span>
+        </div>
+        <div class="top-actions">
+          <span class="live-status" id="liveStatus">Live</span>
+        </div>
+      </header>
+
+      <section class="chat-shell">
+        <div class="chat-column">
+          <div class="intro" id="intro">
+            <div class="intro-mark">M</div>
+            <h1>Let's build</h1>
+            <p id="introStatus">Local dashboard ready.</p>
+          </div>
+
+          <div class="messages" id="messages" aria-live="polite"></div>
+
+          <form class="composer" id="askForm">
+            <textarea id="prompt" autocomplete="off" placeholder="Ask Masterdale anything" rows="1"></textarea>
+            <div class="composer-footer">
+              <div class="composer-context" id="composerContext">loading local context</div>
+              <div class="composer-controls">
+                <select id="role" aria-label="Model role">
+                  <option value="">Auto</option>
+                  <option value="fast">Fast</option>
+                  <option value="context">Context</option>
+                  <option value="structured">Structured</option>
+                  <option value="reasoning">Deep</option>
+                </select>
+                <button class="send-button" id="sendButton" type="submit">Send</button>
+              </div>
+            </div>
+          </form>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script>
+    const state = {
+      overview: null,
+      busy: false,
+      polling: false,
+      pollTimer: 0,
+      messages: [],
+      history: [],
+      activeHistoryID: ""
+    };
+    const dashboardPollMS = 10000;
+    const dashboardBackgroundPollMS = 60000;
+    const $ = (id) => document.getElementById(id);
+    const fmt = (n, digits = 2) => Number.isFinite(Number(n)) ? Number(n).toFixed(digits) : "-";
+    const relativeTime = (value) => {
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) return "";
+      const seconds = Math.max(0, Math.round((Date.now() - date.getTime()) / 1000));
+      if (seconds < 60) return "just now";
+      const minutes = Math.round(seconds / 60);
+      if (minutes < 60) return `${minutes}m ago`;
+      const hours = Math.round(minutes / 60);
+      if (hours < 24) return `${hours}h ago`;
+      const days = Math.round(hours / 24);
+      return `${days}d ago`;
+    };
+
+    function authHeaders() {
+      const token = localStorage.getItem("masterdale.dashboard.token") || "";
+      return token ? { "Authorization": `Bearer ${token}` } : {};
+    }
+
+    async function apiFetch(path, options = {}) {
+      const headers = Object.assign({}, options.headers || {}, authHeaders());
+      let res = await fetch(path, Object.assign({}, options, { headers }));
+      if (res.status !== 401) return res;
+      const token = window.prompt("Masterdale token");
+      if (!token) return res;
+      localStorage.setItem("masterdale.dashboard.token", token.trim());
+      const retryHeaders = Object.assign({}, options.headers || {}, authHeaders());
+      return fetch(path, Object.assign({}, options, { headers: retryHeaders }));
+    }
+
+    async function loadDashboard() {
+      const res = await apiFetch("/v1/dashboard");
+      if (!res.ok) throw new Error(`overview returned ${res.status}`);
+      const data = await res.json();
+      state.overview = data;
+      markLive();
+      render(data);
+    }
+
+    function render(data) {
+      const node = data.node?.device_id || "local node";
+      $("nodeName").textContent = node;
+      $("brandTitle").textContent = node;
+      $("profileText").textContent = sidebarStatus(data);
+      $("sideNode").textContent = "Masterdale";
+      $("sideStatus").textContent = scopeText(data);
+      $("introStatus").textContent = data.git_summary?.dirty > 0 ? "Local changes need review." : "Local dashboard ready.";
+      renderComposerContext(data);
+      renderContext(data);
+      renderHistory(data.events || []);
+      renderSession();
+    }
+
+    function scopeText(data) {
+      return data.runtime?.remote_scope ? `scope: ${data.runtime.remote_scope}` : "local ops";
+    }
+
+    function markLive() {
+      $("liveStatus").textContent = "Live";
+      $("liveStatus").className = "live-status";
+    }
+
+    function markReconnecting() {
+      $("liveStatus").textContent = "Reconnecting";
+      $("liveStatus").className = "live-status warn";
+    }
+
+    function sidebarStatus(data) {
+      const git = data.git_summary || {};
+      const fleet = data.fleet || {};
+      if (git.dirty > 0) return `${git.dirty} dirty workspace${git.dirty === 1 ? "" : "s"}`;
+      if (fleet.error) return "fleet unavailable";
+      return `${fleet.online || 0}/${fleet.count || 0} devices online`;
+    }
+
+    function renderComposerContext(data) {
+      const model = data.models?.primary || data.models?.context || data.models?.text || "local model";
+      const strategy = data.models?.strategy || "primary";
+      const git = data.git_summary || {};
+      const fleet = data.fleet || {};
+      const energy = data.metrics?.energy || {};
+      const energyText = Number(energy.samples || 0) > 0 ? `${fmt(energy.energy_kwh, 4)} kWh` : "no energy samples";
+      const fleetText = fleet.error ? "fleet unavailable" : `${fleet.online || 0}/${fleet.count || 0} online`;
+      $("composerContext").textContent = `${model} / ${strategy} / ${git.dirty || 0} dirty / ${fleetText} / ${energyText}`;
+    }
+
+    function renderContext(data) {
+      const git = data.git_summary || {};
+      $("contextPill").textContent = git.dirty > 0 ? `${git.dirty} dirty` : "quiet";
+      $("contextPill").className = git.dirty > 0 ? "pill warn" : "pill ok";
+      renderActions(data.actions || []);
+      renderRepos(data.git?.repos || []);
+      renderFleet(data.fleet?.devices || [], data.fleet?.error);
+    }
+
+    function renderActions(actions) {
+      const root = $("actionsList");
+      root.innerHTML = "";
+      actions.slice(0, 4).forEach((action) => {
+        const row = document.createElement("div");
+        row.className = "context-row";
+        row.innerHTML = `<span>${escapeHTML(action.title)}<div class="context-detail">${escapeHTML(action.detail || action.command || "")}</div></span><span class="${pillClass(action.level)}">${escapeHTML(action.level || "info")}</span>`;
+        root.appendChild(row);
+      });
+      if (!actions.length) root.innerHTML = `<div class="context-detail">No visible next action.</div>`;
+    }
+
+    function renderRepos(repos) {
+      const root = $("gitList");
+      root.innerHTML = "";
+      repos.slice(0, 5).forEach((repo) => {
+        const cls = repo.state === "clean" ? "pill ok" : repo.error ? "pill bad" : "pill warn";
+        const row = document.createElement("div");
+        row.className = "context-row";
+        row.innerHTML = `<span>${escapeHTML(repo.name)}<div class="context-detail">${escapeHTML(repo.branch || "unknown branch")}</div></span><span class="${cls}">${escapeHTML(repo.state || "unknown")}</span>`;
+        root.appendChild(row);
+      });
+      if (!repos.length) root.innerHTML = `<div class="context-detail">No Git repos found.</div>`;
+    }
+
+    function renderFleet(devices, error) {
+      const root = $("fleetList");
+      root.innerHTML = "";
+      if (error) {
+        root.innerHTML = `<div class="context-detail">${escapeHTML(error)}</div>`;
+        return;
+      }
+      devices.slice(0, 5).forEach((device) => {
+        const online = Boolean(device.online);
+        const row = document.createElement("div");
+        row.className = "context-row";
+        row.innerHTML = `<span>${escapeHTML(device.hostname || "device")}<div class="context-detail">${escapeHTML(device.os || "unknown")}</div></span><span class="${online ? "pill ok" : "pill"}">${online ? "online" : "offline"}</span>`;
+        root.appendChild(row);
+      });
+      if (!devices.length) root.innerHTML = `<div class="context-detail">No fleet devices discovered.</div>`;
+    }
+
+    function renderHistory(events) {
+      state.history = buildHistory(events);
+      const root = $("chatHistory");
+      root.innerHTML = "";
+      if (!state.history.length) {
+        root.innerHTML = `<div class="empty-history">No chat history yet.</div>`;
+        return;
+      }
+      state.history.forEach((item, index) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = item.id === state.activeHistoryID ? "history-item active" : "history-item";
+        button.dataset.index = String(index);
+        button.innerHTML = `<span class="history-title">${escapeHTML(truncate(item.question, 64))}</span><span class="history-meta">${escapeHTML(relativeTime(item.timestamp))}</span>`;
+        button.addEventListener("click", () => openHistory(index));
+        root.appendChild(button);
+      });
+    }
+
+    function buildHistory(events) {
+      const chronological = events
+        .filter((event) => event.channel === "chat" && event.text)
+        .slice()
+        .reverse();
+      const items = [];
+      for (let i = 0; i < chronological.length; i += 1) {
+        const event = chronological[i];
+        if (event.actor !== "user") continue;
+        let answer = "";
+        for (let j = i + 1; j < chronological.length; j += 1) {
+          const next = chronological[j];
+          if (next.actor === "user") break;
+          if (next.actor === "agent" && next.text) {
+            answer = next.text;
+            break;
+          }
+        }
+        items.push({
+          id: event.id || `${event.timestamp}-${i}`,
+          question: event.text,
+          answer,
+          timestamp: event.timestamp
+        });
+      }
+      return items.reverse().slice(0, 14);
+    }
+
+    function openHistory(index) {
+      const item = state.history[index];
+      if (!item) return;
+      state.activeHistoryID = item.id;
+      state.messages = [{ kind: "user", text: item.question }];
+      if (item.answer) state.messages.push({ kind: "agent", text: item.answer });
+      renderHistory(state.overview?.events || []);
+      renderSession();
+      $("prompt").focus();
+    }
+
+    function newChat() {
+      state.activeHistoryID = "";
+      state.messages = [];
+      renderHistory(state.overview?.events || []);
+      renderSession();
+      $("prompt").focus();
+    }
+
+    function renderSession() {
+      const root = $("messages");
+      root.innerHTML = "";
+      state.messages.forEach((message) => root.appendChild(messageNode(message)));
+      $("intro").hidden = state.messages.length > 0;
+      document.querySelector(".chat-column").classList.toggle("is-empty", state.messages.length === 0);
+    }
+
+    function messageNode(message) {
+      const node = document.createElement("div");
+      node.className = `message ${message.kind}${message.pending ? " pending" : ""}${message.error ? " error" : ""}`;
+      if (message.kind === "agent" && !message.error) {
+        node.innerHTML = renderMarkdown(message.text || "");
+      } else {
+        node.textContent = message.text || "";
+      }
+      return node;
+    }
+
+    function addMessage(kind, text, options = {}) {
+      const message = Object.assign({ id: newID(), kind, text }, options);
+      state.messages.push(message);
+      renderSession();
+      scrollToComposer();
+      return message.id;
+    }
+
+    function updateMessage(id, patch) {
+      const index = state.messages.findIndex((message) => message.id === id);
+      if (index < 0) return;
+      state.messages[index] = Object.assign({}, state.messages[index], patch);
+      renderSession();
+      scrollToComposer();
+    }
+
+    async function ask(prompt, role) {
+      state.activeHistoryID = "";
+      addMessage("user", prompt);
+      const thinkingID = addMessage("agent", "Thinking with local model...", { pending: true });
+      const res = await apiFetch("/v1/dashboard/ask", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt, role, timeout_seconds: role === "reasoning" ? 600 : 300, max_tokens: 900 })
+      });
+      const data = await res.json();
+      updateMessage(thinkingID, {
+        text: data.error ? `Error: ${data.error}` : data.response,
+        pending: false,
+        error: Boolean(data.error)
+      });
+      await loadDashboard();
+    }
+
+    function renderMarkdown(markdown) {
+      const source = String(markdown ?? "").replace(/\r\n/g, "\n");
+      const parts = [];
+      const fence = /```([A-Za-z0-9_-]*)[ \t]*\n?([\s\S]*?)```/g;
+      let last = 0;
+      let match;
+      while ((match = fence.exec(source)) !== null) {
+        if (match.index > last) {
+          parts.push(renderMarkdownBlocks(source.slice(last, match.index)));
+        }
+        parts.push(`<pre><code>${escapeHTML(match[2].replace(/\n$/, ""))}</code></pre>`);
+        last = fence.lastIndex;
+      }
+      if (last < source.length) parts.push(renderMarkdownBlocks(source.slice(last)));
+      return parts.join("") || "<p></p>";
+    }
+
+    function renderMarkdownBlocks(source) {
+      const lines = source.split("\n");
+      const html = [];
+      let paragraph = [];
+      let listType = "";
+
+      const flushParagraph = () => {
+        if (!paragraph.length) return;
+        html.push(`<p>${renderInline(paragraph.join(" "))}</p>`);
+        paragraph = [];
+      };
+      const closeList = () => {
+        if (!listType) return;
+        html.push(`</${listType}>`);
+        listType = "";
+      };
+      const openList = (type) => {
+        if (listType === type) return;
+        closeList();
+        listType = type;
+        html.push(`<${type}>`);
+      };
+
+      lines.forEach((line) => {
+        const trimmed = line.trim();
+        if (!trimmed) {
+          flushParagraph();
+          closeList();
+          return;
+        }
+        const heading = /^(#{1,3})\s+(.+)$/.exec(trimmed);
+        if (heading) {
+          flushParagraph();
+          closeList();
+          const level = heading[1].length;
+          html.push(`<h${level}>${renderInline(heading[2])}</h${level}>`);
+          return;
+        }
+        const unordered = /^[-*]\s+(.+)$/.exec(trimmed);
+        if (unordered) {
+          flushParagraph();
+          openList("ul");
+          html.push(`<li>${renderInline(unordered[1])}</li>`);
+          return;
+        }
+        const ordered = /^\d+\.\s+(.+)$/.exec(trimmed);
+        if (ordered) {
+          flushParagraph();
+          openList("ol");
+          html.push(`<li>${renderInline(ordered[1])}</li>`);
+          return;
+        }
+        const quote = /^>\s?(.+)$/.exec(trimmed);
+        if (quote) {
+          flushParagraph();
+          closeList();
+          html.push(`<blockquote>${renderInline(quote[1])}</blockquote>`);
+          return;
+        }
+        closeList();
+        paragraph.push(trimmed);
+      });
+      flushParagraph();
+      closeList();
+      return html.join("");
+    }
+
+    function renderInline(value) {
+      let out = escapeHTML(value);
+      out = out.replace(/`([^`]+)`/g, "<code>$1</code>");
+      out = out.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+      out = out.replace(/\*([^*]+)\*/g, "<em>$1</em>");
+      out = out.replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, `<a href="$2" target="_blank" rel="noreferrer">$1</a>`);
+      return out;
+    }
+
+    function pillClass(level) {
+      if (level === "ok") return "pill ok";
+      if (level === "warn") return "pill warn";
+      if (level === "bad") return "pill bad";
+      return "pill";
+    }
+
+    function newID() {
+      if (window.crypto?.randomUUID) return window.crypto.randomUUID();
+      return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    }
+
+    function escapeHTML(value) {
+      return String(value ?? "").replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" }[ch]));
+    }
+
+    function truncate(value, limit) {
+      const text = String(value ?? "").replace(/\s+/g, " ").trim();
+      return text.length > limit ? `${text.slice(0, limit - 1)}...` : text;
+    }
+
+    function autosizePrompt() {
+      const prompt = $("prompt");
+      prompt.style.height = "auto";
+      prompt.style.height = `${Math.min(prompt.scrollHeight, 180)}px`;
+    }
+
+    function scrollToComposer() {
+      requestAnimationFrame(() => $("askForm").scrollIntoView({ block: "nearest" }));
+    }
+
+    $("askForm").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      if (state.busy) return;
+      const prompt = $("prompt").value.trim();
+      if (!prompt) return;
+      $("prompt").value = "";
+      autosizePrompt();
+      state.busy = true;
+      $("sendButton").disabled = true;
+      try {
+        await ask(prompt, $("role").value);
+      } finally {
+        state.busy = false;
+        $("sendButton").disabled = false;
+      }
+    });
+    $("prompt").addEventListener("input", autosizePrompt);
+    $("prompt").addEventListener("keydown", (event) => {
+      if (event.key === "Enter" && !event.shiftKey) {
+        event.preventDefault();
+        $("askForm").requestSubmit();
+      }
+    });
+    async function refreshDashboard() {
+      if (state.polling) return;
+      state.polling = true;
+      try {
+        await loadDashboard();
+      } catch (err) {
+        markReconnecting();
+        if (!state.overview) addMessage("agent", `Dashboard failed to load: ${err.message}`, { error: true });
+      } finally {
+        state.polling = false;
+        scheduleDashboardPoll();
+      }
+    }
+
+    function scheduleDashboardPoll() {
+      window.clearTimeout(state.pollTimer);
+      state.pollTimer = window.setTimeout(refreshDashboard, document.hidden ? dashboardBackgroundPollMS : dashboardPollMS);
+    }
+
+    $("newChatButton").addEventListener("click", newChat);
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden) {
+        scheduleDashboardPoll();
+        return;
+      }
+      refreshDashboard();
+    });
+
+    refreshDashboard().catch((err) => {
+      markReconnecting();
+      addMessage("agent", `Dashboard failed to load: ${err.message}`, { error: true });
+    });
+  </script>
+</body>
+</html>
