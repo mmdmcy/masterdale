@@ -5,6 +5,7 @@
 .env
 .env.*
 !.env.example
+.masterdale-local/
 *.test
 coverage.out
 *.log
