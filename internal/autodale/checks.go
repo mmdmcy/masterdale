@@ -9,7 +9,6 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
-	"syscall"
 	"time"
 )
 
@@ -52,17 +51,14 @@ func systemCheck() CheckResult {
 		"cpus":     runtime.NumCPU(),
 		"hostname": hostname(),
 	}
+	if usage, ok := rootDiskUsage(); ok {
+		details["disk_total_bytes"] = usage.totalBytes
+		details["disk_free_bytes"] = usage.freeBytes
+	}
 	if runtime.GOOS == "linux" {
 		if mem := readMeminfo(); len(mem) > 0 {
 			details["mem_total_kb"] = mem["MemTotal"]
 			details["mem_available_kb"] = mem["MemAvailable"]
-		}
-		var st syscall.Statfs_t
-		if err := syscall.Statfs("/", &st); err == nil {
-			total := st.Blocks * uint64(st.Bsize)
-			free := st.Bavail * uint64(st.Bsize)
-			details["disk_total_bytes"] = total
-			details["disk_free_bytes"] = free
 		}
 		if b, err := os.ReadFile("/proc/loadavg"); err == nil {
 			details["loadavg"] = strings.TrimSpace(string(b))

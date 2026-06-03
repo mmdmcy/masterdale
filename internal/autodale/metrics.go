@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"syscall"
 	"time"
 )
 
@@ -58,12 +57,9 @@ func SampleMetrics(idleWatts, maxWatts float64) MetricsSample {
 		sample.MemoryTotalMB = mem["MemTotal"] / 1024
 		sample.MemoryFreeMB = mem["MemAvailable"] / 1024
 	}
-	var st syscall.Statfs_t
-	if err := syscall.Statfs("/", &st); err == nil {
-		total := st.Blocks * uint64(st.Bsize)
-		free := st.Bavail * uint64(st.Bsize)
-		sample.DiskTotalGB = round(float64(total)/(1024*1024*1024), 2)
-		sample.DiskFreeGB = round(float64(free)/(1024*1024*1024), 2)
+	if usage, ok := rootDiskUsage(); ok {
+		sample.DiskTotalGB = round(float64(usage.totalBytes)/(1024*1024*1024), 2)
+		sample.DiskFreeGB = round(float64(usage.freeBytes)/(1024*1024*1024), 2)
 	}
 	enrichBattery(&sample)
 	if sample.PowerWatts <= 0 {
