@@ -39,6 +39,14 @@ Prerequisites:
 make check
 go run ./cmd/dale env init
 go run ./cmd/dale up
+```
+
+`dale up` runs in the foreground. Leave that terminal open while using the
+agent; press Ctrl-C to stop it.
+
+In another terminal:
+
+```bash
 go run ./cmd/dale ask "What is Masterdale?"
 ```
 
@@ -62,6 +70,14 @@ go run ./cmd/autodale agent fleet-report --ai-timeout 300 --max-tokens 700
 
 go run ./cmd/comdale draft --type post --topic "local AI automation"
 go run ./cmd/comdale --profile profiles/example-business.json campaign "Masterdale demo"
+```
+
+If you intentionally want a detached background agent, use:
+
+```bash
+go run ./cmd/dale up --background
+go run ./cmd/dale status
+go run ./cmd/dale down
 ```
 
 ## Configuration

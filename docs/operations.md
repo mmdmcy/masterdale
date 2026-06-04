@@ -17,18 +17,48 @@ go run ./cmd/dale env init
 go run ./cmd/dale up
 ```
 
+`dale up` is a foreground session by default. Keep that terminal open while the
+agent should be reachable; press Ctrl-C to stop it. It does not install a
+startup item or relaunch itself after reboot.
+
 Copy the generated `DALE_TOKEN` into `.env` on every device that should join the same private fleet.
+
+For the lowest-friction client setup, put this in the repo-root `.env` on the
+other device:
+
+```env
+DALE_TOKEN=<same token as the host>
+MASTERDALE_URL=http://<host-tailscale-ip>:7345
+DALE_REMOTE_SCOPE=private
+DALE_REMOTE_EXEC=0
+```
+
+Then remote file commands can use the env file directly:
+
+```bash
+go run ./cmd/dale remote list
+go run ./cmd/dale remote read path/to/file
+go run ./cmd/dale remote search --query TODO
+```
 
 ## Device Agent
 
-Start or refresh the agent:
+Start the agent in the current terminal:
 
 ```bash
 go run ./cmd/dale up
-go run ./cmd/dale up --restart
 ```
 
-Stop it:
+Stop it with Ctrl-C.
+
+Start a detached background agent only when you explicitly want that:
+
+```bash
+go run ./cmd/dale up --background
+go run ./cmd/dale up --background --restart
+```
+
+Stop a detached background agent:
 
 ```bash
 go run ./cmd/dale down
@@ -48,7 +78,8 @@ Start the node agent and open the built-in dashboard:
 go run ./cmd/dale up
 ```
 
-Then visit `http://127.0.0.1:7345/dashboard`.
+Then visit `http://127.0.0.1:7345/dashboard`. The agent stops when that terminal
+session stops.
 
 The dashboard shows node status, Git workspaces, local energy metrics, fleet discovery, recent events, model routing, and an agent chat surface. The UI stays live through lightweight polling; `daled` serves cached component snapshots so Git and fleet inspection are not recomputed on every browser update. On another private-network device, open `http://<device-ip>:7345/dashboard`; the page will prompt for `DALE_TOKEN` before loading protected dashboard data.
 
@@ -81,6 +112,8 @@ go run ./cmd/dale fleet devices
 go run ./cmd/dale fleet doctor --device <device>
 go run ./cmd/dale fleet git-audit --device <device> --fetch
 ```
+
+`fleet doctor` does not start a local agent unless `--auto-start` is passed.
 
 If a device is visible but unreachable:
 

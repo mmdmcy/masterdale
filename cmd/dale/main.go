@@ -54,7 +54,7 @@ func run(args []string) error {
 		fmt.Println("device:", cfg.DeviceID)
 		return nil
 	case "up":
-		return up(cfg, args[1:])
+		return up(cfg, store, args[1:])
 	case "down":
 		return down(cfg)
 	case "status":
@@ -195,7 +195,7 @@ func envCommand(args []string) error {
 	if err != nil {
 		return err
 	}
-	content := "# Masterdale local secrets. Do not commit this file.\n\nDALE_TOKEN=" + token + "\nDALE_REMOTE_EXEC=0\nDALE_REMOTE_SCOPE=private\nLEARDALE_URL=http://127.0.0.1:7345\n"
+	content := "# Masterdale local secrets. Do not commit this file.\n\nDALE_TOKEN=" + token + "\nDALE_REMOTE_EXEC=0\nDALE_REMOTE_SCOPE=private\nMASTERDALE_URL=http://127.0.0.1:7345\nLEARDALE_URL=http://127.0.0.1:7345\n"
 	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 		return err
 	}
@@ -203,9 +203,10 @@ func envCommand(args []string) error {
 	return nil
 }
 
-func up(cfg dale.Config, args []string) error {
+func up(cfg dale.Config, store *dale.Store, args []string) error {
 	port := parsePort(args, 7345)
 	restart := hasFlag(args, "--restart")
+	background := hasFlag(args, "--background") || hasFlag(args, "--detach")
 	listen := "0.0.0.0:" + strconv.Itoa(port)
 	if err := ensureEnvForUp(); err != nil {
 		return err
@@ -227,6 +228,16 @@ func up(cfg dale.Config, args []string) error {
 		fmt.Println("daled already running on", listen)
 		return nil
 	}
+	if !background {
+		if store == nil {
+			return fmt.Errorf("foreground up requires an open store")
+		}
+		cfg.Listen = listen
+		fmt.Println("daled foreground session on http://" + listen)
+		fmt.Println("dashboard: http://127.0.0.1:" + strconv.Itoa(port) + "/dashboard")
+		fmt.Println("press Ctrl-C to stop")
+		return dale.NewServer(cfg, store).ListenAndServe()
+	}
 	if err := startBackgroundDaled(cfg, listen); err != nil {
 		return err
 	}
@@ -234,6 +245,8 @@ func up(cfg dale.Config, args []string) error {
 	for time.Now().Before(deadline) {
 		if ok, _ := localHealth(port); ok {
 			fmt.Println("daled running on", listen)
+			fmt.Println("background pid:", filepath.Join(cfg.DataDir, "daled.pid"))
+			fmt.Println("background log:", filepath.Join(cfg.DataDir, "daled.log"))
 			return nil
 		}
 		time.Sleep(300 * time.Millisecond)
@@ -299,7 +312,7 @@ func ensureEnvForUp() error {
 		if err != nil {
 			return err
 		}
-		content := "# Masterdale local secrets. Do not commit this file.\n\nDALE_TOKEN=" + token + "\nDALE_REMOTE_EXEC=1\nDALE_REMOTE_SCOPE=private\nLEARDALE_URL=http://127.0.0.1:7345\n"
+		content := "# Masterdale local secrets. Do not commit this file.\n\nDALE_TOKEN=" + token + "\nDALE_REMOTE_EXEC=1\nDALE_REMOTE_SCOPE=private\nMASTERDALE_URL=http://127.0.0.1:7345\nLEARDALE_URL=http://127.0.0.1:7345\n"
 		if err := os.WriteFile(".env", []byte(content), 0o600); err != nil {
 			return err
 		}
@@ -324,6 +337,10 @@ func ensureEnvForUp() error {
 	if !strings.Contains(text, "DALE_REMOTE_SCOPE=") {
 		text = appendEnvLine(text, "DALE_REMOTE_SCOPE=private")
 		_ = os.Setenv("DALE_REMOTE_SCOPE", "private")
+	}
+	if !strings.Contains(text, "MASTERDALE_URL=") {
+		text = appendEnvLine(text, "MASTERDALE_URL=http://127.0.0.1:7345")
+		_ = os.Setenv("MASTERDALE_URL", "http://127.0.0.1:7345")
 	}
 	text = setEnvLine(text, "DALE_REMOTE_EXEC", "1")
 	_ = os.Setenv("DALE_REMOTE_EXEC", "1")
@@ -851,6 +868,9 @@ func remoteBaseURL(args []string, port int) (string, error) {
 		}
 		return "http://" + host + ":" + strconv.Itoa(port), nil
 	}
+	if envURL := defaultRemoteURL(); envURL != "" {
+		return envURL, nil
+	}
 	device := flagValue(args, "--device")
 	if device == "" {
 		probes, err := dale.ProbeFleet(context.Background(), port)
@@ -880,6 +900,16 @@ func remoteBaseURL(args []string, port int) (string, error) {
 		return "", fmt.Errorf("device %q is not reachable: %s", device, probe.Error)
 	}
 	return strings.TrimSuffix(probe.URL, "/healthz"), nil
+}
+
+func defaultRemoteURL() string {
+	for _, key := range []string{"MASTERDALE_URL", "DALE_URL", "LEARDALE_URL"} {
+		value := strings.TrimRight(strings.TrimSpace(os.Getenv(key)), "/")
+		if value != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 func remoteGET(baseURL string, path string, params map[string]string, token string, out any) error {
@@ -943,6 +973,7 @@ type doctorReport struct {
 func fleetDoctor(cfg dale.Config, args []string) error {
 	port := parsePort(args, 7345)
 	deviceName := flagValue(args, "--device")
+	autoStart := hasFlag(args, "--auto-start")
 	if deviceName == "" {
 		deviceName = firstPositional(args)
 	}
@@ -982,13 +1013,17 @@ func fleetDoctor(cfg dale.Config, args []string) error {
 		probe = dale.ProbeDevice(context.Background(), device, port)
 	}
 	if !probe.OK && isSelfDevice(probe.Device) {
-		report.Checks = append(report.Checks, doctorCheck{Name: "auto-start", Detail: "local device detected; starting daled"})
-		if err := up(cfg, []string{"--port", strconv.Itoa(port)}); err != nil {
-			report.Checks = append(report.Checks, doctorCheck{Name: "auto-start", Detail: err.Error()})
+		if !autoStart {
+			report.Checks = append(report.Checks, doctorCheck{Name: "auto-start", Detail: "local device detected; not starting automatically"})
 		} else {
-			probe = dale.ProbeDevice(context.Background(), probe.Device, port)
-			if probe.OK {
-				report.Checks = append(report.Checks, doctorCheck{Name: "auto-start", OK: true, Detail: "daled started"})
+			report.Checks = append(report.Checks, doctorCheck{Name: "auto-start", Detail: "local device detected; starting detached daled"})
+			if err := up(cfg, nil, []string{"--background", "--port", strconv.Itoa(port)}); err != nil {
+				report.Checks = append(report.Checks, doctorCheck{Name: "auto-start", Detail: err.Error()})
+			} else {
+				probe = dale.ProbeDevice(context.Background(), probe.Device, port)
+				if probe.OK {
+					report.Checks = append(report.Checks, doctorCheck{Name: "auto-start", OK: true, Detail: "daled started"})
+				}
 			}
 		}
 	}
@@ -1116,7 +1151,9 @@ func printUsage() {
 	fmt.Println(`dale commands:
   init
   env init
-  up [--restart] [--port 7345]
+  up [--background|--detach] [--restart] [--port 7345]
+  down
+  status [--port 7345]
   serve [--listen 127.0.0.1:7345]
   chat [message]
   ask [--fast|--deep] [--role context|text|fast|reasoning|structured] [--model name] [--timeout seconds] [--max-tokens n] <question>
@@ -1128,7 +1165,7 @@ func printUsage() {
   devices
   fleet devices
   fleet probe [--port 7345]
-  fleet doctor [--device name] [--port 7345]
+  fleet doctor [--device name] [--auto-start] [--port 7345]
   fleet git-audit [--device name] [--fetch] [--port 7345]
   fleet npm-scan --package <name> [--port 7345]
   remote list [--device name] [path]
