@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -67,7 +68,8 @@ func run(args []string) error {
 			cfg.Listen = args[2]
 		}
 		fmt.Println("daled listening on http://" + cfg.Listen)
-		return dale.NewServer(cfg, store).ListenAndServe()
+		fmt.Println("press Ctrl-C to stop")
+		return listenAndServeUntilInterrupt(cfg, store)
 	case "chat":
 		return chat(cfg, store, args[1:])
 	case "ask":
@@ -236,7 +238,7 @@ func up(cfg dale.Config, store *dale.Store, args []string) error {
 		fmt.Println("daled foreground session on http://" + listen)
 		fmt.Println("dashboard: http://127.0.0.1:" + strconv.Itoa(port) + "/dashboard")
 		fmt.Println("press Ctrl-C to stop")
-		return dale.NewServer(cfg, store).ListenAndServe()
+		return listenAndServeUntilInterrupt(cfg, store)
 	}
 	if err := startBackgroundDaled(cfg, listen); err != nil {
 		return err
@@ -252,6 +254,23 @@ func up(cfg dale.Config, store *dale.Store, args []string) error {
 		time.Sleep(300 * time.Millisecond)
 	}
 	return fmt.Errorf("started daled, but health check did not answer; check %s", filepath.Join(cfg.DataDir, "daled.log"))
+}
+
+func listenAndServeUntilInterrupt(cfg dale.Config, store *dale.Store) error {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer stop()
+	done := make(chan struct{})
+	go func() {
+		select {
+		case <-ctx.Done():
+			fmt.Println()
+			fmt.Println("received Ctrl-C; stopping daled...")
+		case <-done:
+		}
+	}()
+	err := dale.NewServer(cfg, store).ListenAndServeContext(ctx)
+	close(done)
+	return err
 }
 
 func down(cfg dale.Config) error {

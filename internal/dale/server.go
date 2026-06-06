@@ -1,6 +1,7 @@
 package dale
 
 import (
+	"context"
 	"crypto/subtle"
 	"encoding/json"
 	"errors"
@@ -44,7 +45,35 @@ func (s *Server) Handler() http.Handler {
 }
 
 func (s *Server) ListenAndServe() error {
-	return http.ListenAndServe(s.cfg.Listen, s.Handler())
+	return s.ListenAndServeContext(context.Background())
+}
+
+func (s *Server) ListenAndServeContext(ctx context.Context) error {
+	server := &http.Server{Addr: s.cfg.Listen, Handler: s.Handler()}
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- server.ListenAndServe()
+	}()
+
+	select {
+	case err := <-errCh:
+		if errors.Is(err, http.ErrServerClosed) {
+			return nil
+		}
+		return err
+	case <-ctx.Done():
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := server.Shutdown(shutdownCtx); err != nil {
+			_ = server.Close()
+			return err
+		}
+		err := <-errCh
+		if errors.Is(err, http.ErrServerClosed) {
+			return nil
+		}
+		return err
+	}
 }
 
 func (s *Server) authMiddleware(next http.Handler) http.Handler {

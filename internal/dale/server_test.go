@@ -2,10 +2,12 @@ package dale
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 )
 
 func TestServerEventsAndMCP(t *testing.T) {
@@ -32,6 +34,30 @@ func TestServerEventsAndMCP(t *testing.T) {
 	server.Handler().ServeHTTP(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("unexpected mcp status: %d", w.Code)
+	}
+}
+
+func TestServerListenAndServeContextStopsOnCancel(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.DataDir = t.TempDir()
+	cfg.Listen = "127.0.0.1:0"
+	store, err := OpenStore(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() {
+		done <- NewServer(cfg, store).ListenAndServeContext(ctx)
+	}()
+	cancel()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("expected clean shutdown after cancel: %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("server did not stop after context cancellation")
 	}
 }
 
