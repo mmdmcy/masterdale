@@ -16,6 +16,14 @@ coverage.out
 *.dylib
 
 # Local runtime state should stay outside git.
+AGENTS.md
+private/
+docs/private/
+.codex/
+.claude/
+state/
+uploads/
+logs/
 *.db
 *.db-shm
 *.db-wal
