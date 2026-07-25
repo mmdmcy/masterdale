@@ -42,9 +42,15 @@ git diff --check
 
 Verified 2026-07-25: `go test ./...` passed; `git diff --check` clean.
 
+Private-tailnet dogfood verification on 2026-07-25 also confirmed that the
+HTTPS relying-party route reaches LinuxMice authorization with S256 PKCE,
+state, nonce, and the registered Masterdale callback. The proxied protected API
+returns `401` with the OIDC discovery header before authentication; reverse
+proxy traffic does not inherit direct-loopback trust.
+
 ## Known Loose Ends
 
-- No live production identity claim; dogfood against a local LinuxMice Identity
-  instance before treating OIDC as operator-ready.
+- This remains private dogfood evidence, not a production identity claim,
+  protocol-conformance result, or independent security review.
 - Related optional clients live in RustOpViewer; LinuxMice remains the identity
   provider.

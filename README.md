@@ -30,7 +30,7 @@ This repository builds three Go binaries:
 
 Prerequisites:
 
-- Go 1.23+
+- Go 1.24+
 - Git
 - Optional: Ollama with a local model
 - Optional: Tailscale for easy private-fleet discovery
