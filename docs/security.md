@@ -40,6 +40,14 @@ Authorization: Bearer <DALE_TOKEN>
 
 The bearer token is shared by devices for the current prototype. It is stored in `.env`, which is ignored by git. Token comparison uses constant-time comparison.
 
+LinuxMice OIDC can optionally authenticate dashboard browsers without copying
+the bearer token into browser storage. Configure all five `DALE_OIDC_*` values,
+including `DALE_OIDC_ALLOWED_SUBJECTS`; only explicitly listed LinuxMice user
+UUIDs receive a Masterdale session. Authorization code + S256 PKCE, state,
+nonce, and a browser-bound flow cookie protect the exchange. Provider tokens
+are discarded after verification. The resulting opaque in-memory session lasts
+at most 12 hours, and `DALE_TOKEN` remains available for CLI/device automation.
+
 Future hardening should replace shared-token-only trust with per-device identity, mTLS, signed requests, or short-lived session tokens.
 
 ## Endpoint Risk

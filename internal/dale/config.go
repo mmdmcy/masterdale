@@ -34,6 +34,7 @@ type Config struct {
 	OllamaURL   string      `json:"ollama_url"`
 	Models      ModelConfig `json:"models"`
 	SafeRoots   []string    `json:"safe_roots"`
+	OIDC        *OIDCConfig `json:"-"`
 }
 
 func DefaultDataDir() string {
@@ -169,6 +170,11 @@ func LoadOrCreateConfig(dataDir string) (Config, error) {
 	if roots := safeRootsFromEnv(); len(roots) > 0 {
 		cfg.SafeRoots = roots
 	}
+	oidc, err := loadOIDCConfig()
+	if err != nil {
+		return Config{}, err
+	}
+	cfg.OIDC = oidc
 	return cfg, nil
 }
 

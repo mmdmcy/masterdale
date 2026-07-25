@@ -32,10 +32,14 @@ type Server struct {
 	store          *Store
 	mux            *http.ServeMux
 	dashboardCache *dashboardCache
+	oidc           *oidcRuntime
 }
 
 func NewServer(cfg Config, store *Store) *Server {
-	s := &Server{cfg: cfg, store: store, mux: http.NewServeMux(), dashboardCache: newDashboardCache()}
+	s := &Server{
+		cfg: cfg, store: store, mux: http.NewServeMux(), dashboardCache: newDashboardCache(),
+		oidc: newOIDCRuntime(cfg.OIDC),
+	}
 	s.routes()
 	return s
 }
@@ -82,7 +86,11 @@ func (s *Server) authMiddleware(next http.Handler) http.Handler {
 			writeError(w, http.StatusForbidden, errors.New("remote access is restricted to loopback and private-network addresses by default; set DALE_REMOTE_SCOPE=public only if a firewall or reverse proxy protects this service"))
 			return
 		}
-		if r.URL.Path == "/healthz" || isDashboardShellRequest(r) || isLoopbackRequest(r) {
+		if r.URL.Path == "/healthz" || isDashboardShellRequest(r) || isOIDCRoute(r) || isDirectLoopbackRequest(r) {
+			next.ServeHTTP(w, r)
+			return
+		}
+		if s.oidc != nil && s.oidc.authorizeSession(r) {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -91,6 +99,9 @@ func (s *Server) authMiddleware(next http.Handler) http.Handler {
 			return
 		}
 		if !validBearerToken(r.Header.Get("Authorization"), s.cfg.AccessToken) {
+			if s.oidc != nil {
+				w.Header().Set("X-Masterdale-OIDC", "enabled")
+			}
 			writeError(w, http.StatusUnauthorized, errors.New("authorization required"))
 			return
 		}
@@ -125,6 +136,14 @@ func remoteNetworkAllowed(r *http.Request) bool {
 func isLoopbackRequest(r *http.Request) bool {
 	ip := requestIP(r)
 	return ip != nil && ip.IsLoopback()
+}
+
+func isDirectLoopbackRequest(r *http.Request) bool {
+	return isLoopbackRequest(r) &&
+		r.Header.Get("Forwarded") == "" &&
+		r.Header.Get("X-Forwarded-For") == "" &&
+		r.Header.Get("X-Forwarded-Host") == "" &&
+		r.Header.Get("X-Forwarded-Proto") == ""
 }
 
 func requestIP(r *http.Request) net.IP {
@@ -197,6 +216,8 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("/v1/dashboard", s.handleDashboardData)
 	s.mux.HandleFunc("/v1/dashboard/ask", s.handleDashboardAsk)
 	s.mux.HandleFunc("/healthz", s.handleHealth)
+	s.mux.HandleFunc("/auth/oidc/start", s.handleOIDCStart)
+	s.mux.HandleFunc("/auth/oidc/callback", s.handleOIDCCallback)
 	s.mux.HandleFunc("/v1/events", s.handleEvents)
 	s.mux.HandleFunc("/v1/resources/search", s.handleSearch)
 	s.mux.HandleFunc("/v1/tasks", s.handleTasks)

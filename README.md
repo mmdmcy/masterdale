@@ -100,6 +100,12 @@ DALE_MODEL_STRATEGY=primary
 COMDALE_PROFILE=profiles/example-business.json
 ```
 
+Optional LinuxMice browser SSO uses the five `DALE_OIDC_*` settings documented
+in `.env.example`. It uses authorization code + S256 PKCE, nonce/state and a
+short-lived browser-bound flow, requires an explicit owner-subject allowlist,
+then discards provider tokens and issues a bounded opaque Masterdale session.
+`DALE_TOKEN` remains the independent CLI/device automation path.
+
 Optional private dashboard context can be added without committing it:
 
 ```env
@@ -111,7 +117,8 @@ DALE_DASHBOARD_CONTEXT_DOCS=/path/to/private-notes.md:/path/to/team-runbook.md
 Masterdale is built for private networks, not direct public exposure.
 
 - Public-internet clients are blocked unless `DALE_REMOTE_SCOPE=public` is explicitly set.
-- Non-localhost API requests require `Authorization: Bearer <DALE_TOKEN>`.
+- Non-localhost API requests require `Authorization: Bearer <DALE_TOKEN>` or,
+  when configured for a browser, an allowlisted LinuxMice OIDC session.
 - File APIs stay inside configured safe roots and refuse known secret/runtime filenames.
 - Remote command execution requires `DALE_REMOTE_EXEC=1`, safe roots, timeouts, and clear operator intent.
 - `comdale` drafts and plans only; it does not publish or contact customers automatically.

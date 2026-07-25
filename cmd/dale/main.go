@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -971,7 +972,7 @@ func doJSON(req *http.Request, out any) error {
 		if msg, ok := payload["error"].(string); ok && msg != "" {
 			return fmt.Errorf("%s: %s", resp.Status, msg)
 		}
-		return fmt.Errorf(resp.Status)
+		return errors.New(resp.Status)
 	}
 	return json.NewDecoder(resp.Body).Decode(out)
 }
