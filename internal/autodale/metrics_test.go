@@ -40,3 +40,30 @@ func TestDailyEnergyReportUsesLocalDay(t *testing.T) {
 		t.Fatalf("unexpected local-day energy: %#v", report)
 	}
 }
+
+func TestNetworkSampleCalculatesRatesAndKeepsCumulativeCounters(t *testing.T) {
+	sample := networkSampleFromCounters(
+		"wlan0",
+		networkCounters{rxBytes: 1_000, txBytes: 2_000},
+		networkCounters{rxBytes: 4_000, txBytes: 3_000},
+		2,
+	)
+	if sample.RXBytesPerSecond != 1_500 || sample.TXBytesPerSecond != 500 {
+		t.Fatalf("unexpected rates: %#v", sample)
+	}
+	if sample.RXBytes != 4_000 || sample.TXBytes != 3_000 {
+		t.Fatalf("unexpected counters: %#v", sample)
+	}
+}
+
+func TestNetworkSampleDoesNotTurnCounterResetIntoTraffic(t *testing.T) {
+	sample := networkSampleFromCounters(
+		"wlan0",
+		networkCounters{rxBytes: 4_000, txBytes: 3_000},
+		networkCounters{rxBytes: 100, txBytes: 50},
+		1,
+	)
+	if sample.RXBytesPerSecond != 0 || sample.TXBytesPerSecond != 0 {
+		t.Fatalf("counter reset should report no rate: %#v", sample)
+	}
+}

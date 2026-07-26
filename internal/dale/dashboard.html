@@ -658,6 +658,10 @@
             <div class="context-title">Fleet</div>
             <div id="fleetList"></div>
           </section>
+          <section class="context-group">
+            <div class="context-title">Network</div>
+            <div id="networkList"></div>
+          </section>
         </div>
       </details>
       <nav class="nav" aria-label="Dashboard">
@@ -814,9 +818,13 @@
       const git = data.git_summary || {};
       const fleet = data.fleet || {};
       const energy = data.metrics?.energy || {};
+      const network = data.metrics?.network || {};
       const energyText = Number(energy.samples || 0) > 0 ? `${fmt(energy.energy_kwh, 4)} kWh` : "no energy samples";
+      const networkText = network.interface
+        ? `down ${formatRate(network.rx_bytes_per_second)} / up ${formatRate(network.tx_bytes_per_second)}`
+        : "network unavailable";
       const fleetText = fleet.error ? "fleet unavailable" : `${fleet.online || 0}/${fleet.count || 0} online`;
-      $("composerContext").textContent = `${model} / ${strategy} / ${git.dirty || 0} dirty / ${fleetText} / ${energyText}`;
+      $("composerContext").textContent = `${model} / ${strategy} / ${git.dirty || 0} dirty / ${fleetText} / ${energyText} / ${networkText}`;
     }
 
     function renderContext(data) {
@@ -826,6 +834,7 @@
       renderActions(data.actions || []);
       renderRepos(data.git?.repos || []);
       renderFleet(data.fleet?.devices || [], data.fleet?.error);
+      renderNetwork(data.metrics?.network || {});
     }
 
     function renderActions(actions) {
@@ -868,6 +877,42 @@
         root.appendChild(row);
       });
       if (!devices.length) root.innerHTML = `<div class="context-detail">No fleet devices discovered.</div>`;
+    }
+
+    function renderNetwork(network) {
+      const root = $("networkList");
+      root.innerHTML = "";
+      if (!network.interface) {
+        root.innerHTML = `<div class="context-detail">Network counters unavailable.</div>`;
+        return;
+      }
+      const rate = document.createElement("div");
+      rate.className = "context-row";
+      rate.innerHTML = `<span>${escapeHTML(network.interface)}<div class="context-detail">down ${escapeHTML(formatRate(network.rx_bytes_per_second))} / up ${escapeHTML(formatRate(network.tx_bytes_per_second))}</div></span><span class="pill ok">${escapeHTML(network.kind || "network")}</span>`;
+      root.appendChild(rate);
+
+      const total = document.createElement("div");
+      total.className = "context-row";
+      const signal = Number(network.wifi_signal_dbm || 0);
+      const signalText = signal ? `${signal.toFixed(0)} dBm` : "since interface start";
+      total.innerHTML = `<span>Traffic total<div class="context-detail">down ${escapeHTML(formatBytes(network.rx_bytes))} / up ${escapeHTML(formatBytes(network.tx_bytes))}</div></span><span class="pill">${escapeHTML(signalText)}</span>`;
+      root.appendChild(total);
+    }
+
+    function formatRate(value) {
+      return `${formatBytes(Number(value || 0))}/s`;
+    }
+
+    function formatBytes(value) {
+      let amount = Math.max(0, Number(value || 0));
+      const units = ["B", "KB", "MB", "GB", "TB"];
+      let unit = 0;
+      while (amount >= 1000 && unit < units.length - 1) {
+        amount /= 1000;
+        unit += 1;
+      }
+      const digits = amount >= 100 || unit === 0 ? 0 : amount >= 10 ? 1 : 2;
+      return `${amount.toFixed(digits)} ${units[unit]}`;
     }
 
     function renderHistory(events) {

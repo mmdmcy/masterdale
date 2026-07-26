@@ -144,6 +144,11 @@ go run ./cmd/autodale monitor watch --interval 1m
 ```
 
 Energy is estimated unless the platform exposes battery power or a real external meter is integrated.
+The dashboard also samples the default network interface from kernel byte
+counters. It reports current receive/transmit rates, cumulative bytes since the
+interface started, and Linux Wi-Fi signal when available. These device counters
+do not represent router-wide or billing-month usage; use the modem traffic
+monitor or provider records for that boundary.
 
 ## Local AI Operator Report
 

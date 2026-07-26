@@ -13,19 +13,34 @@ import (
 )
 
 type MetricsSample struct {
-	Timestamp      string  `json:"timestamp"`
-	HostName       string  `json:"hostname"`
-	CPUPercent     float64 `json:"cpu_percent"`
-	LoadAverage    string  `json:"load_average,omitempty"`
-	MemoryTotalMB  uint64  `json:"memory_total_mb,omitempty"`
-	MemoryFreeMB   uint64  `json:"memory_free_mb,omitempty"`
-	DiskTotalGB    float64 `json:"disk_total_gb,omitempty"`
-	DiskFreeGB     float64 `json:"disk_free_gb,omitempty"`
-	BatteryPercent float64 `json:"battery_percent,omitempty"`
-	PowerWatts     float64 `json:"power_watts,omitempty"`
-	PowerSource    string  `json:"power_source"`
-	EnergySource   string  `json:"energy_source"`
-	EstimatedWatts float64 `json:"estimated_watts,omitempty"`
+	Timestamp      string        `json:"timestamp"`
+	HostName       string        `json:"hostname"`
+	CPUPercent     float64       `json:"cpu_percent"`
+	LoadAverage    string        `json:"load_average,omitempty"`
+	MemoryTotalMB  uint64        `json:"memory_total_mb,omitempty"`
+	MemoryFreeMB   uint64        `json:"memory_free_mb,omitempty"`
+	DiskTotalGB    float64       `json:"disk_total_gb,omitempty"`
+	DiskFreeGB     float64       `json:"disk_free_gb,omitempty"`
+	BatteryPercent float64       `json:"battery_percent,omitempty"`
+	PowerWatts     float64       `json:"power_watts,omitempty"`
+	PowerSource    string        `json:"power_source"`
+	EnergySource   string        `json:"energy_source"`
+	EstimatedWatts float64       `json:"estimated_watts,omitempty"`
+	Network        NetworkSample `json:"network"`
+}
+
+type NetworkSample struct {
+	Timestamp        string  `json:"timestamp"`
+	Interface        string  `json:"interface,omitempty"`
+	Kind             string  `json:"kind,omitempty"`
+	Source           string  `json:"source"`
+	RXBytes          uint64  `json:"rx_bytes,omitempty"`
+	TXBytes          uint64  `json:"tx_bytes,omitempty"`
+	RXBytesPerSecond float64 `json:"rx_bytes_per_second,omitempty"`
+	TXBytesPerSecond float64 `json:"tx_bytes_per_second,omitempty"`
+	WiFiSignalDBm    float64 `json:"wifi_signal_dbm,omitempty"`
+	WiFiQuality      float64 `json:"wifi_quality_percent,omitempty"`
+	SampleSeconds    float64 `json:"sample_seconds,omitempty"`
 }
 
 type EnergyReport struct {
@@ -62,6 +77,7 @@ func SampleMetrics(idleWatts, maxWatts float64) MetricsSample {
 		sample.DiskFreeGB = round(float64(usage.freeBytes)/(1024*1024*1024), 2)
 	}
 	enrichBattery(&sample)
+	sample.Network = SampleNetwork(250 * time.Millisecond)
 	if sample.PowerWatts <= 0 {
 		if idleWatts <= 0 {
 			idleWatts = 8
@@ -74,6 +90,120 @@ func SampleMetrics(idleWatts, maxWatts float64) MetricsSample {
 		sample.EnergySource = "battery_sensor"
 	}
 	return sample
+}
+
+type networkCounters struct {
+	rxBytes uint64
+	txBytes uint64
+}
+
+func SampleNetwork(interval time.Duration) NetworkSample {
+	sample := NetworkSample{
+		Timestamp: time.Now().UTC().Format(time.RFC3339Nano),
+		Source:    "unavailable",
+	}
+	if interval <= 0 {
+		interval = 250 * time.Millisecond
+	}
+	iface := defaultNetworkInterface()
+	if iface == "" {
+		return sample
+	}
+	before, ok := readNetworkCounters(iface)
+	if !ok {
+		return sample
+	}
+	started := time.Now()
+	time.Sleep(interval)
+	after, ok := readNetworkCounters(iface)
+	if !ok {
+		return sample
+	}
+	elapsed := time.Since(started).Seconds()
+	sample = networkSampleFromCounters(iface, before, after, elapsed)
+	if signal, quality, ok := wirelessSignal(iface); ok {
+		sample.Kind = "wifi"
+		sample.WiFiSignalDBm = signal
+		sample.WiFiQuality = quality
+	}
+	return sample
+}
+
+func networkSampleFromCounters(
+	iface string,
+	before networkCounters,
+	after networkCounters,
+	elapsed float64,
+) NetworkSample {
+	sample := NetworkSample{
+		Timestamp:     time.Now().UTC().Format(time.RFC3339Nano),
+		Interface:     iface,
+		Kind:          "network",
+		Source:        "default_route_sysfs",
+		RXBytes:       after.rxBytes,
+		TXBytes:       after.txBytes,
+		SampleSeconds: round(elapsed, 3),
+	}
+	if elapsed <= 0 || after.rxBytes < before.rxBytes || after.txBytes < before.txBytes {
+		return sample
+	}
+	sample.RXBytesPerSecond = round(float64(after.rxBytes-before.rxBytes)/elapsed, 2)
+	sample.TXBytesPerSecond = round(float64(after.txBytes-before.txBytes)/elapsed, 2)
+	return sample
+}
+
+func defaultNetworkInterface() string {
+	file, err := os.Open("/proc/net/route")
+	if err != nil {
+		return ""
+	}
+	defer file.Close()
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		fields := strings.Fields(scanner.Text())
+		if len(fields) < 4 || fields[0] == "Iface" || fields[1] != "00000000" {
+			continue
+		}
+		flags, err := strconv.ParseUint(fields[3], 16, 64)
+		if err == nil && flags&1 == 1 && fields[0] != "lo" {
+			return fields[0]
+		}
+	}
+	return ""
+}
+
+func readNetworkCounters(iface string) (networkCounters, bool) {
+	base := filepath.Join("/sys/class/net", iface, "statistics")
+	rx, errRX := strconv.ParseUint(strings.TrimSpace(readSmall(filepath.Join(base, "rx_bytes"))), 10, 64)
+	tx, errTX := strconv.ParseUint(strings.TrimSpace(readSmall(filepath.Join(base, "tx_bytes"))), 10, 64)
+	if errRX != nil || errTX != nil {
+		return networkCounters{}, false
+	}
+	return networkCounters{rxBytes: rx, txBytes: tx}, true
+}
+
+func wirelessSignal(iface string) (float64, float64, bool) {
+	file, err := os.Open("/proc/net/wireless")
+	if err != nil {
+		return 0, 0, false
+	}
+	defer file.Close()
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		name, values, ok := strings.Cut(line, ":")
+		if !ok || strings.TrimSpace(name) != iface {
+			continue
+		}
+		fields := strings.Fields(values)
+		if len(fields) < 4 {
+			return 0, 0, false
+		}
+		link := parseFloat(strings.TrimSuffix(fields[1], "."))
+		level := parseFloat(strings.TrimSuffix(fields[2], "."))
+		return level, round(math.Max(0, math.Min(100, link/70*100)), 1), true
+	}
+	return 0, 0, false
 }
 
 func AppendMetric(sink Sink, sample MetricsSample) error {

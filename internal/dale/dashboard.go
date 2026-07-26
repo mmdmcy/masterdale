@@ -40,6 +40,7 @@ type DashboardMetrics struct {
 	Samples int                     `json:"samples"`
 	Latest  *autodale.MetricsSample `json:"latest,omitempty"`
 	Energy  autodale.EnergyReport   `json:"energy"`
+	Network autodale.NetworkSample  `json:"network"`
 	Error   string                  `json:"error,omitempty"`
 }
 
@@ -329,6 +330,7 @@ func dashboardMetrics() DashboardMetrics {
 	out := DashboardMetrics{
 		Samples: len(samples),
 		Energy:  autodale.DailyEnergyReport(samples, time.Now().Format("2006-01-02"), dashboardKWhCost()),
+		Network: autodale.SampleNetwork(250 * time.Millisecond),
 	}
 	if len(samples) > 0 {
 		latest := samples[len(samples)-1]
@@ -498,6 +500,7 @@ func (s *Server) dashboardAskPrompt(ctx context.Context, question string) string
 			"memory_free_mb":  metricValue(overview.Metrics.Latest, "memory"),
 			"battery_percent": metricValue(overview.Metrics.Latest, "battery"),
 			"power_source":    metricString(overview.Metrics.Latest, "power_source"),
+			"network":         overview.Metrics.Network,
 		},
 		"fleet":        map[string]any{"count": overview.Fleet.Count, "online": overview.Fleet.Online, "error": overview.Fleet.Error},
 		"event_counts": overview.EventCounts,
