@@ -888,38 +888,38 @@ func remoteBaseURL(args []string, port int) (string, error) {
 		}
 		return "http://" + host + ":" + strconv.Itoa(port), nil
 	}
-	if envURL := defaultRemoteURL(); envURL != "" {
-		return envURL, nil
-	}
 	device := flagValue(args, "--device")
-	if device == "" {
-		probes, err := dale.ProbeFleet(context.Background(), port)
+	if device != "" {
+		found, err := dale.FindFleetDevice(context.Background(), device)
 		if err != nil {
 			return "", err
 		}
-		var candidates []dale.FleetProbe
-		for _, probe := range probes {
-			if probe.OK {
-				candidates = append(candidates, probe)
-			}
+		probe := dale.ProbeDevice(context.Background(), found, port)
+		if !probe.OK {
+			return "", fmt.Errorf("device %q is not reachable: %s", device, probe.Error)
 		}
-		if len(candidates) == 0 {
-			return "", fmt.Errorf("no reachable fleet device found")
-		}
-		if len(candidates) > 1 {
-			return "", fmt.Errorf("multiple reachable devices; pass --device")
-		}
-		return strings.TrimSuffix(candidates[0].URL, "/healthz"), nil
+		return strings.TrimSuffix(probe.URL, "/healthz"), nil
 	}
-	found, err := dale.FindFleetDevice(context.Background(), device)
+	if envURL := defaultRemoteURL(); envURL != "" {
+		return envURL, nil
+	}
+	probes, err := dale.ProbeFleet(context.Background(), port)
 	if err != nil {
 		return "", err
 	}
-	probe := dale.ProbeDevice(context.Background(), found, port)
-	if !probe.OK {
-		return "", fmt.Errorf("device %q is not reachable: %s", device, probe.Error)
+	var candidates []dale.FleetProbe
+	for _, probe := range probes {
+		if probe.OK {
+			candidates = append(candidates, probe)
+		}
 	}
-	return strings.TrimSuffix(probe.URL, "/healthz"), nil
+	if len(candidates) == 0 {
+		return "", fmt.Errorf("no reachable fleet device found")
+	}
+	if len(candidates) > 1 {
+		return "", fmt.Errorf("multiple reachable devices; pass --device")
+	}
+	return strings.TrimSuffix(candidates[0].URL, "/healthz"), nil
 }
 
 func defaultRemoteURL() string {
