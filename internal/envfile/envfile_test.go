@@ -23,3 +23,18 @@ func TestLoadDoesNotOverrideExistingEnv(t *testing.T) {
 		t.Fatalf("expected quoted value, got %q", got)
 	}
 }
+
+func TestLoadOverrideReplacesExistingEnv(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, ".env")
+	if err := os.WriteFile(path, []byte("TEST_TOKEN=from-file\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("TEST_TOKEN", "from-env")
+	if err := LoadOverride(path); err != nil {
+		t.Fatal(err)
+	}
+	if got := os.Getenv("TEST_TOKEN"); got != "from-file" {
+		t.Fatalf("expected file value to win, got %q", got)
+	}
+}

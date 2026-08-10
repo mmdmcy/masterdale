@@ -119,6 +119,9 @@ func LoadOrCreateConfig(dataDir string) (Config, error) {
 	if errors.Is(err, os.ErrNotExist) {
 		cfg := DefaultConfig()
 		cfg.DataDir = dataDir
+		if token := os.Getenv("DALE_TOKEN"); token != "" {
+			cfg.AccessToken = token
+		}
 		return cfg, SaveConfig(cfg)
 	}
 	if err != nil {

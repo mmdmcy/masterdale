@@ -18,3 +18,16 @@ func TestDefaultRemoteURL(t *testing.T) {
 		t.Fatalf("expected MASTERDALE_URL to win: %q", got)
 	}
 }
+
+func TestShouldOverrideEnvFile(t *testing.T) {
+	for _, command := range []string{"up", "remote", "fleet", "token"} {
+		if !shouldOverrideEnvFile([]string{command}) {
+			t.Fatalf("expected %q to use the canonical environment file", command)
+		}
+	}
+	for _, args := range [][]string{nil, {"serve"}, {"status"}} {
+		if shouldOverrideEnvFile(args) {
+			t.Fatalf("did not expect %q to override inherited environment", args)
+		}
+	}
+}

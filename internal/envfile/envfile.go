@@ -35,6 +35,17 @@ func FindUp(name string) (string, bool) {
 }
 
 func Load(path string) error {
+	return load(path, false)
+}
+
+// LoadOverride loads every value from path, replacing inherited environment
+// values. Long-running services use this when the file is the canonical
+// configuration source and a stale parent shell must not win.
+func LoadOverride(path string) error {
+	return load(path, true)
+}
+
+func load(path string, override bool) error {
 	f, err := os.Open(path)
 	if err != nil {
 		return err
@@ -51,7 +62,7 @@ func Load(path string) error {
 		if !ok {
 			continue
 		}
-		if _, exists := os.LookupEnv(key); exists {
+		if _, exists := os.LookupEnv(key); exists && !override {
 			continue
 		}
 		if err := os.Setenv(key, value); err != nil {

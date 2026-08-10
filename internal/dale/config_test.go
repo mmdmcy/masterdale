@@ -90,3 +90,28 @@ func TestLoadConfigMigratesOldQwenTextDefaultIntoReasoning(t *testing.T) {
 		}
 	}
 }
+
+func TestLoadOrCreateConfigUsesEnvironmentTokenOnFirstRun(t *testing.T) {
+	dataDir := t.TempDir()
+	t.Setenv("DALE_TOKEN", "configured-token")
+
+	cfg, err := LoadOrCreateConfig(dataDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.AccessToken != "configured-token" {
+		t.Fatalf("access token = %q, want configured environment token", cfg.AccessToken)
+	}
+
+	b, err := os.ReadFile(filepath.Join(dataDir, "config.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var saved Config
+	if err := json.Unmarshal(b, &saved); err != nil {
+		t.Fatal(err)
+	}
+	if saved.AccessToken != "configured-token" {
+		t.Fatalf("saved access token = %q, want configured environment token", saved.AccessToken)
+	}
+}

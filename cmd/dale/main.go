@@ -32,8 +32,16 @@ func main() {
 }
 
 func run(args []string) error {
-	if _, _, err := envfile.LoadUp(".env"); err != nil {
-		return err
+	if shouldOverrideEnvFile(args) {
+		if path, ok := envfile.FindUp(".env"); ok {
+			if err := envfile.LoadOverride(path); err != nil {
+				return err
+			}
+		}
+	} else {
+		if _, _, err := envfile.LoadUp(".env"); err != nil {
+			return err
+		}
 	}
 	if len(args) >= 1 && args[0] == "env" {
 		return envCommand(args[1:])
@@ -106,6 +114,18 @@ func run(args []string) error {
 	}
 	printUsage()
 	return nil
+}
+
+func shouldOverrideEnvFile(args []string) bool {
+	if len(args) == 0 {
+		return false
+	}
+	switch args[0] {
+	case "up", "remote", "fleet", "token":
+		return true
+	default:
+		return false
+	}
 }
 
 func remote(cfg dale.Config, args []string) error {
@@ -213,6 +233,17 @@ func up(cfg dale.Config, store *dale.Store, args []string) error {
 	listen := "0.0.0.0:" + strconv.Itoa(port)
 	if err := ensureEnvForUp(); err != nil {
 		return err
+	}
+	if path, ok := envfile.FindUp(".env"); ok {
+		if err := envfile.LoadOverride(path); err != nil {
+			return err
+		}
+		if token := os.Getenv("DALE_TOKEN"); token != "" {
+			cfg.AccessToken = token
+			if err := dale.SaveConfig(cfg); err != nil {
+				return err
+			}
+		}
 	}
 	if ok, _ := localHealth(port); ok {
 		if restart {
