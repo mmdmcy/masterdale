@@ -150,6 +150,28 @@ interface started, and Linux Wi-Fi signal when available. These device counters
 do not represent router-wide or billing-month usage; use the modem traffic
 monitor or provider records for that boundary.
 
+For a boot-persistent, low-overhead Linux deployment, use the systemd pair in
+`deploy/systemd/`. It runs one short sample every five minutes rather than
+keeping a monitor process resident:
+
+```bash
+go build -o /tmp/autodale ./cmd/autodale
+sudo useradd --system --home-dir /var/lib/masterdale --create-home --shell /usr/sbin/nologin masterdale
+sudo install -m 0755 /tmp/autodale /usr/local/bin/autodale
+sudo install -m 0644 deploy/systemd/masterdale-energy.service /etc/systemd/system/masterdale-energy.service
+sudo install -m 0644 deploy/systemd/masterdale-energy.timer /etc/systemd/system/masterdale-energy.timer
+sudo systemctl daemon-reload
+sudo systemctl enable --now masterdale-energy.timer
+systemctl status masterdale-energy.timer --no-pager
+```
+
+The unit runs as the dedicated `masterdale` service account and stores samples
+at `~/.local/share/autodale/metrics.jsonl`, where they can be read by a
+Masterdale dashboard running under the same account. The included unit uses an
+estimated 8–35 W range; replace those two flags with measured idle/full-load
+values if a plug-in power meter is available. The `--kwh-cost` value only
+affects the cost report, not the kWh estimate.
+
 ## Local AI Operator Report
 
 ```bash

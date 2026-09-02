@@ -1,0 +1,12 @@
+[Unit]
+Description=Run Masterdale estimated energy sample every 5 minutes
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=5min
+AccuracySec=1min
+Persistent=true
+Unit=masterdale-energy.service
+
+[Install]
+WantedBy=timers.target

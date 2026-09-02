@@ -1,0 +1,25 @@
+# Masterdale estimated energy sampler for a Linux deployment.
+# Install the autodale binary at /usr/local/bin/autodale before enabling this unit.
+
+[Unit]
+Description=Masterdale estimated energy sample
+After=local-fs.target network-online.target masterdale.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=masterdale
+Group=masterdale
+WorkingDirectory=/
+Environment=AUTODALE_DATA_DIR=/var/lib/masterdale/.local/share/autodale
+Environment=LEARDALE_URL=http://127.0.0.1:7345
+ExecStart=/usr/local/bin/autodale monitor sample --idle-watts 8 --max-watts 35
+StandardOutput=null
+StandardError=journal
+Nice=10
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=read-only
+ReadWritePaths=/var/lib/masterdale/.local/share/autodale
