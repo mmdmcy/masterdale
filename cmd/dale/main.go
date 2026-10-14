@@ -781,6 +781,8 @@ func fleet(cfg dale.Config, args []string) error {
 		return printJSON(map[string]any{"local": local, "remote": remotes})
 	case "git-audit":
 		return fleetGitAudit(cfg, args[1:])
+	case "ssh":
+		return fleetSSH(cfg, args[1:])
 	}
 	printUsage()
 	return nil
@@ -1219,6 +1221,8 @@ func printUsage() {
   fleet doctor [--device name] [--auto-start] [--port 7345]
   fleet git-audit [--device name] [--fetch] [--port 7345]
   fleet npm-scan --package <name> [--port 7345]
+  fleet ssh [status] [--device name]
+  fleet ssh setup [--device name|--all] [--user name] [--wait seconds] [--port 7345]
   remote list [--device name] [path]
   remote read [--device name] <path>
   remote search [--device name] --query text [--root path]

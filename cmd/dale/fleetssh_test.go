@@ -1,0 +1,51 @@
+package main
+
+import (
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+	"testing"
+)
+
+func TestMarshalOpenSSHPrivateKeyIsReadableBySSHKeygen(t *testing.T) {
+	pub, priv, err := generateEd25519KeyPair()
+	if err != nil {
+		t.Fatal(err)
+	}
+	comment := "sleep@lawnmower-fleet"
+	pemBytes := encodeOpenSSHPrivateKeyPEM(pub, priv, comment)
+
+	path := filepath.Join(t.TempDir(), "unit_fleet_ed25519")
+	if err := os.WriteFile(path, pemBytes, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	sshKeygen, err := exec.LookPath("ssh-keygen")
+	if err != nil {
+		t.Skip("ssh-keygen not available for round-trip verification")
+	}
+	out, err := exec.Command(sshKeygen, "-y", "-f", path).CombinedOutput()
+	if err != nil {
+		t.Fatalf("ssh-keygen rejected the generated key: %v: %s", err, strings.TrimSpace(string(out)))
+	}
+	line := strings.TrimSpace(string(out))
+	want := publicKeyLine(pub, comment)
+	if line != want {
+		t.Fatalf("public key mismatch:\n got: %s\nwant: %s", line, want)
+	}
+}
+
+func TestSSHConfigLinesHaveAlias(t *testing.T) {
+	config := "Host mini\n  HostName 100.93.10.92\n\nHost windowspc desktop-a34ht70\n  User homer\n"
+	for _, alias := range []string{"mini", "windowspc", "DESKTOP-A34HT70"} {
+		if !sshConfigLinesHaveAlias(config, alias) {
+			t.Fatalf("expected alias %q to be present", alias)
+		}
+	}
+	for _, alias := range []string{"nitori", "a34ht70", "mini-nested"} {
+		if sshConfigLinesHaveAlias(config, alias) {
+			t.Fatalf("expected alias %q to be absent", alias)
+		}
+	}
+}
