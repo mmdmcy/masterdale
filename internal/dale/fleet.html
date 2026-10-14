@@ -89,6 +89,7 @@
       <button data-tab="folders" type="button">Folders</button>
       <button data-tab="devices" type="button">Devices</button>
       <button data-tab="move" type="button">Sync &amp; move</button>
+      <button data-tab="upkeep" type="button">Upkeep</button>
       <button data-tab="tools" type="button">Tools</button>
       <button data-tab="integrations" type="button">Integrations</button>
       <button data-tab="selfhost" type="button">Self-hosting</button>
@@ -215,7 +216,7 @@
         $("view").innerHTML = `<div class="empty">${esc(view?.error || view?.hint || "No data")}</div>`;
         return;
       }
-      ({ repos: renderRepos, folders: renderFolders, devices: renderDevices, move: renderMove, tools: renderTools, integrations: renderIntegrations, selfhost: renderSelfhost, rescue: renderRescue })[state.tab](view.data);
+      ({ repos: renderRepos, folders: renderFolders, devices: renderDevices, move: renderMove, upkeep: renderUpkeep, tools: renderTools, integrations: renderIntegrations, selfhost: renderSelfhost, rescue: renderRescue })[state.tab](view.data);
     }
 
     function deviceCards(data) {
@@ -372,6 +373,19 @@
       if (state.tab === "move") renderMove();
     }
 
+    function renderUpkeep(data) {
+      const canChange = state.caps?.actions_enabled;
+      const size = (kib) => bytes(kib * 1024);
+      $("view").innerHTML = `<div class="panel"><p>Routine care for every device: updates outdated tools whose checkout is clean, and removes build output (target/, node_modules, ...) unused for 14 days. Python virtualenvs and dirty checkouts are left alone; health is only reported.</p>${data.devices.some((d) => d.updates.length || d.reclaimable_folders) ? `<button class="danger" data-upkeep="run" type="button" ${canChange ? "" : "disabled"}>Run upkeep…</button>` : `<p>${pill("same")} nothing to do</p>`}</div>` +
+        `<div class="scroll"><table><thead><tr><th>Device</th><th>Health</th><th>Updates</th><th>Old build output</th><th>Left alone</th></tr></thead><tbody>${data.devices.map((d) => {
+          if (!d.reachable) return `<tr><td>${esc(d.device)}</td><td>${pill(d.health.status || "offline")}</td><td colspan="3" class="detail">${esc(d.health.detail)}</td></tr>`;
+          const done = data.executed;
+          const updates = done ? d.update_results.map((u) => `${u.success ? "updated" : "FAILED"} ${esc(u.tool)}`).join("<br>") : esc(d.updates.join(", "));
+          const cleaned = done ? (d.clean_result ? `freed ${size(d.clean_result.freed_kib)}` : "—") : (d.reclaimable_folders ? `${d.reclaimable_folders} folder(s), ${size(d.reclaimable_kib)}` : "—");
+          return `<tr><td>${esc(d.device)}</td><td>${pill(d.health.status)}<br><span class="muted">${esc(d.health.detail)}</span></td><td>${updates || "—"}</td><td>${cleaned}</td><td class="detail">${esc(d.held.join("; "))}</td></tr>`;
+        }).join("")}</tbody></table></div>`;
+    }
+
     function renderTools(data) {
       const text = filterText();
       const canChange = state.caps?.actions_enabled;
@@ -504,6 +518,17 @@
           ? `Nothing is deleted. Uncommitted work moves to ${m.b}; ${m.a}'s copy of each moved checkout is saved under refs/lmice/switched/ (git stash apply restores it).`
           : "Nothing is deleted; replaced files are archived first, and the result is checked again afterwards.";
         askConfirm(command, note, () => runMoveJob(execute.dataset.execute));
+        return;
+      }
+      if (event.target.closest("button[data-upkeep]")) {
+        askConfirm("lmice upkeep --yes --format json", "Updates outdated tools from clean checkouts and removes build output unused for 14 days on every device. Builds can take several minutes.", async () => {
+          $("meta").textContent = "running upkeep on every device (builds can take several minutes)…";
+          try {
+            const job = await startJob({ kind: "execute-upkeep" });
+            state.views.upkeep = job.view;
+          } catch (error) { $("meta").textContent = `failed: ${error.message}`; return; }
+          render();
+        });
         return;
       }
       const tool = event.target.closest("button[data-tool]");

@@ -50,6 +50,8 @@ var linuxmiceViews = map[string][]string{
 	"rescue":       {"rescue", "status", "--format", "json"},
 	"health":       {"health", "--fleet", "--format", "json"},
 	"tools":        {"tools", "--fleet", "--format", "json"},
+	"upkeep":       {"upkeep", "--format", "json"},
+	"space":        {"space", "--fleet", "--format", "json"},
 	// Not served as a view: names this node for the page.
 	"integrations-local": {"integrations", "--format", "json"},
 }
@@ -272,6 +274,8 @@ func linuxmiceJobArgs(req LinuxMiceJobRequest) ([]string, bool, error) {
 			return append(args, "--execute"), true, nil
 		}
 		return args, false, nil
+	case "execute-upkeep":
+		return []string{"upkeep", "--yes", "--format", "json"}, true, nil
 	case "tool-update":
 		if !linuxmiceIDPattern.MatchString(req.ID) || !linuxmiceDevicePattern.MatchString(req.Device) {
 			return nil, false, errors.New("pick a tool and a device")
