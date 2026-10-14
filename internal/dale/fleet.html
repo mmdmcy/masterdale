@@ -90,6 +90,7 @@
       <button data-tab="devices" type="button">Devices</button>
       <button data-tab="move" type="button">Sync &amp; move</button>
       <button data-tab="upkeep" type="button">Upkeep</button>
+      <button data-tab="agents" type="button">Agents</button>
       <button data-tab="tools" type="button">Tools</button>
       <button data-tab="integrations" type="button">Integrations</button>
       <button data-tab="selfhost" type="button">Self-hosting</button>
@@ -162,7 +163,7 @@
     }
     function esc(value) { return String(value ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
     function bytes(n) { if (!n) return "0 B"; const u = ["B", "KB", "MB", "GB", "TB"]; let i = 0; while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; } return `${n.toFixed(i ? 1 : 0)} ${u[i]}`; }
-    const LEVEL = { same: "ok", ok: "ok", online: "ok", active: "ok", done: "ok", ready: "ok", info: "", repository: "", planned: "", dirty: "warn", behind: "warn", differs: "warn", "only-on": "warn", attention: "warn", warning: "warn", warn: "warn", "not-ready": "warn", unknown: "warn", diverged: "bad", offline: "bad", unreachable: "bad", unhealthy: "bad", error: "bad", failed: "bad", blocker: "bad", critical: "bad", "endpoint-outdated": "bad" };
+    const LEVEL = { on: "ok", off: "", "logged in": "ok", "not logged in": "warn", same: "ok", ok: "ok", online: "ok", active: "ok", done: "ok", ready: "ok", info: "", repository: "", planned: "", dirty: "warn", behind: "warn", differs: "warn", "only-on": "warn", attention: "warn", warning: "warn", warn: "warn", "not-ready": "warn", unknown: "warn", diverged: "bad", offline: "bad", unreachable: "bad", unhealthy: "bad", error: "bad", failed: "bad", blocker: "bad", critical: "bad", "endpoint-outdated": "bad" };
     function pill(code) { return `<span class="pill ${LEVEL[code] ?? ""}">${esc(code)}</span>`; }
     function meta(view) {
       if (!view) return "";
@@ -216,7 +217,7 @@
         $("view").innerHTML = `<div class="empty">${esc(view?.error || view?.hint || "No data")}</div>`;
         return;
       }
-      ({ repos: renderRepos, folders: renderFolders, devices: renderDevices, move: renderMove, upkeep: renderUpkeep, tools: renderTools, integrations: renderIntegrations, selfhost: renderSelfhost, rescue: renderRescue })[state.tab](view.data);
+      ({ repos: renderRepos, folders: renderFolders, devices: renderDevices, move: renderMove, upkeep: renderUpkeep, agents: renderAgents, tools: renderTools, integrations: renderIntegrations, selfhost: renderSelfhost, rescue: renderRescue })[state.tab](view.data);
     }
 
     function deviceCards(data) {
@@ -386,6 +387,31 @@
         }).join("")}</tbody></table></div>`;
     }
 
+    function renderAgents(d) {
+      const canChange = state.caps?.actions_enabled;
+      if (d.status !== "ok") {
+        $("view").innerHTML = `<div class="empty">${esc(d.device)}: ${esc(d.status)} (${esc(d.detail)})</div>`;
+        return;
+      }
+      const dis = canChange ? "" : "disabled";
+      const button = (kind, label, cls = "") => `<button class="${cls}" data-agents="${kind}" data-device="${esc(d.device)}" type="button" ${dis}>${label}</button>`;
+      const running = d.server === "active";
+      const claude = d.claude ? `${esc(d.claude_version || "installed")} ${pill(d.logged_in ? "logged in" : "not logged in")}` : pill("missing");
+      const server = running
+        ? `${pill("active")} in ${esc(d.server_dir || "?")}${d.sessions ? `, ${esc(d.sessions)} sessions in use` : ""}`
+        : d.server === "absent" ? `${pill("off")} not set up` : pill(d.server);
+      const browser = d.browser ? `${pill("on")} each session gets its own private headless browser${d.browser_installed ? "" : " (browser not downloaded yet)"}` : pill("off");
+      const t3 = d.t3code ? `${pill(d.t3code)}${d.t3code_url ? ` at <a href="${esc(d.t3code_url)}" target="_blank" rel="noopener">${esc(d.t3code_url)}</a>` : ""}` : "—";
+      $("view").innerHTML = `<div class="panel"><p>Claude sessions that live on ${esc(d.device)} and that you open from the Code tab in the Claude app or claude.ai/code, several at once. The files and tools stay on ${esc(d.device)}.</p></div>` +
+        `<div class="scroll"><table><tbody>` +
+        `<tr><th>Claude Code</th><td>${claude}</td><td></td></tr>` +
+        `<tr><th>Remote Control</th><td>${server}</td><td>${running ? button("agents-stop", "Stop…", "danger") : button("agents-start", "Start…")}</td></tr>` +
+        `<tr><th>Agent browser</th><td>${browser}</td><td>${d.browser ? button("agents-browser-off", "Turn off…", "danger") : button("agents-browser-on", "Turn on…")}</td></tr>` +
+        `<tr><th>T3 Code</th><td>${t3}</td><td></td></tr>` +
+        `</tbody></table></div>` +
+        (d.next?.length ? `<div class="panel"><p><b>Next</b></p><ul>${d.next.map((step) => `<li>${esc(step)}</li>`).join("")}</ul></div>` : "");
+    }
+
     function renderTools(data) {
       const text = filterText();
       const canChange = state.caps?.actions_enabled;
@@ -528,6 +554,26 @@
             state.views.upkeep = job.view;
           } catch (error) { $("meta").textContent = `failed: ${error.message}`; return; }
           render();
+        });
+        return;
+      }
+      const agents = event.target.closest("button[data-agents]");
+      if (agents) {
+        const { agents: kind, device } = agents.dataset;
+        const words = { "agents-start": "start", "agents-stop": "stop", "agents-browser-on": "browser on", "agents-browser-off": "browser off" }[kind];
+        const notes = {
+          "agents-start": "Keeps Claude Code Remote Control running as a user service; sessions you open from the Claude app or claude.ai/code run there.",
+          "agents-stop": "Stops the Remote Control service; open sessions end.",
+          "agents-browser-on": "Registers a private headless browser for every new Claude session (downloads about 120 MB once).",
+          "agents-browser-off": "New Claude sessions start without the agent browser.",
+        };
+        askConfirm(`lmice agents ${words} --device ${device} --yes --format json`, notes[kind], async () => {
+          $("meta").textContent = `agents ${words} on ${device}…`;
+          try {
+            const job = await startJob({ kind, device });
+            if (job.view?.data && job.view.data.success === false) $("meta").textContent = `failed: ${job.view.data.output || ""}`;
+          } catch (error) { $("meta").textContent = `failed: ${error.message}`; return; }
+          load(true);
         });
         return;
       }

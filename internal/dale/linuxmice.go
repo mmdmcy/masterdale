@@ -51,6 +51,7 @@ var linuxmiceViews = map[string][]string{
 	"health":       {"health", "--fleet", "--format", "json"},
 	"tools":        {"tools", "--fleet", "--format", "json"},
 	"upkeep":       {"upkeep", "--format", "json"},
+	"agents":       {"agents", "--format", "json"},
 	"space":        {"space", "--fleet", "--format", "json"},
 	// Not served as a view: names this node for the page.
 	"integrations-local": {"integrations", "--format", "json"},
@@ -78,7 +79,8 @@ type LinuxMiceView struct {
 // LinuxMiceJobRequest asks for one plan or change.
 type LinuxMiceJobRequest struct {
 	// plan-sync, plan-switch, plan-retire, plan-carry, execute-sync,
-	// execute-switch, execute-carry,
+	// execute-switch, execute-carry, execute-upkeep, tool-update,
+	// agents-start, agents-stop, agents-browser-on, agents-browser-off,
 	// integration-enable or integration-disable.
 	Kind   string `json:"kind"`
 	A      string `json:"a,omitempty"`
@@ -276,6 +278,18 @@ func linuxmiceJobArgs(req LinuxMiceJobRequest) ([]string, bool, error) {
 		return args, false, nil
 	case "execute-upkeep":
 		return []string{"upkeep", "--yes", "--format", "json"}, true, nil
+	case "agents-start", "agents-stop", "agents-browser-on", "agents-browser-off":
+		if !linuxmiceDevicePattern.MatchString(req.Device) {
+			return nil, false, errors.New("pick a device")
+		}
+		action := map[string][]string{
+			"agents-start":       {"start"},
+			"agents-stop":        {"stop"},
+			"agents-browser-on":  {"browser", "on"},
+			"agents-browser-off": {"browser", "off"},
+		}[req.Kind]
+		args := append([]string{"agents"}, action...)
+		return append(args, "--device", req.Device, "--yes", "--format", "json"), true, nil
 	case "tool-update":
 		if !linuxmiceIDPattern.MatchString(req.ID) || !linuxmiceDevicePattern.MatchString(req.Device) {
 			return nil, false, errors.New("pick a tool and a device")

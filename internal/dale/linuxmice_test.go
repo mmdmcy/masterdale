@@ -161,6 +161,7 @@ func TestLinuxMiceJobsPlanFreelyAndChangeOnlyWhenAllowed(t *testing.T) {
 		`{"kind":"plan-sync","a":"nitori","b":"nitori"}`,
 		`{"kind":"plan-sync","a":"-x","b":"lawnmower"}`,
 		`{"kind":"integration-enable","id":"Bad;id","device":"nitori"}`,
+		`{"kind":"agents-start","device":"-x"}`,
 		`{"kind":"rm"}`,
 	} {
 		if w := postJob(t, server, body, ""); w.Code != http.StatusBadRequest {
@@ -183,6 +184,20 @@ func TestLinuxMiceJobsPlanFreelyAndChangeOnlyWhenAllowed(t *testing.T) {
 	args, _ := os.ReadFile(argsFile)
 	if got := strings.Join(strings.Fields(string(args)), " "); got != "integrations disable gitdcy --device lawnmower --format json" {
 		t.Fatalf("change job did not run against the fake lmice: %q", got)
+	}
+}
+
+func TestLinuxMiceAgentJobsMapToWords(t *testing.T) {
+	for kind, want := range map[string]string{
+		"agents-start":       "agents start --device lawnmower --yes --format json",
+		"agents-stop":        "agents stop --device lawnmower --yes --format json",
+		"agents-browser-on":  "agents browser on --device lawnmower --yes --format json",
+		"agents-browser-off": "agents browser off --device lawnmower --yes --format json",
+	} {
+		args, changes, err := linuxmiceJobArgs(LinuxMiceJobRequest{Kind: kind, Device: "lawnmower"})
+		if err != nil || !changes || strings.Join(args, " ") != want {
+			t.Fatalf("%s: got %q changes=%v err=%v", kind, args, changes, err)
+		}
 	}
 }
 
