@@ -197,6 +197,37 @@ Masterdale defaults to a primary all-round model, currently `gemma4:e2b`, so one
 go run ./cmd/autodale check ssh <host> --port 22
 ```
 
+## Fleet SSH Setup
+
+Masterdale doubles as the bootstrap for plain SSH: a device only needs the
+shared `DALE_TOKEN` and a running agent; `fleet ssh` then turns that token
+access into normal key-based SSH. Afterwards masterdale is out of the loop —
+you just use `ssh <host>` and can leave the remote agent stopped. It uses the
+agent's remote-exec API on each target, generates an ed25519
+fleet key for this machine when needed (`~/.ssh/<hostname>_fleet_ed25519`),
+and writes a per-host alias into `~/.ssh/config`:
+
+```bash
+go run ./cmd/dale fleet ssh            # status of every fleet device
+go run ./cmd/dale fleet ssh setup --device <device>
+go run ./cmd/dale fleet ssh setup      # every online fleet device
+```
+
+For Linux and macOS targets the public key is appended to the target's
+`~/.ssh/authorized_keys` through the agent (idempotent, and skipped when the
+key is already trusted). Windows targets get a generated PowerShell script
+staged next to the agent's working directory; it installs Microsoft's
+built-in OpenSSH Server capability, starts `sshd`, opens TCP 22 in the
+firewall, authorizes the fleet keys in `administrators_authorized_keys`, and
+sets PowerShell as the default SSH shell. Running it needs one UAC consent
+on that device; the command polls the script's status file and finishes with
+a passwordless `ssh <host> whoami` test.
+
+Windows devices that have a pending OS reboot will not accept the capability
+install until they restart. Devices whose home filesystem is read-only must
+be authorized out-of-band; `setup` then reports the exact failure instead of
+writing blindly.
+
 ## Demo Script
 
 ```bash

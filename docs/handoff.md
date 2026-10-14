@@ -1,10 +1,22 @@
 # Masterdale Handoff
 
-Last updated: 2026-07-25
+Last updated: 2026-10-11
 
 This file is the editable working handoff for future sessions.
 
 ## Current Position
+
+- The Go module is dependency-free: `go.mod` has no requires and `go.sum` is
+  empty. `internal/dale/jwt.go` (stdlib `net/http` + `crypto`) replaces the
+  former go-oidc/oauth2 pair for OIDC discovery, JWKS caching and rotation,
+  ID token verification (RS*/ES*/EdDSA), and the authorization code + S256
+  PKCE exchange (basic auth with an automatic client_secret_post retry).
+- `dale fleet ssh status|setup` automates fleet SSH: stdlib ed25519 key
+  generation in OpenSSH's native format (round-trip tested against
+  `ssh-keygen`), idempotent authorized_keys management over `/v1/exec` for
+  Unix targets, and a generated elevated PowerShell setup (OpenSSH Server
+  capability, sshd, firewall, `administrators_authorized_keys`) for Windows
+  targets with UAC consent and status polling.
 
 - Optional LinuxMice OIDC browser SSO sits beside the existing `DALE_TOKEN`
   bearer path.
@@ -20,10 +32,14 @@ This file is the editable working handoff for future sessions.
 
 ## Recent Changes
 
+- 2026-10-11: removed all third-party Go dependencies (stdlib OIDC in
+  `internal/dale/jwt.go` + `jwt_test.go`); added `dale fleet ssh` in
+  `cmd/dale/fleetssh.go` (+ tests); docs updated in README/operations.
 - New `internal/dale/oidc.go` + `oidc_test.go`
 - `server.go` routes/middleware, `config.go` load, dashboard OIDC redirect hook
 - Docs/env: `.env.example`, `README.md`, `docs/security.md`
-- `go.mod` / `go.sum` pull in `go-oidc` and `oauth2`
+- `go.mod` / `go.sum` had pulled in `go-oidc` and `oauth2`; both were removed
+  in the 2026-10-11 stdlib rewrite and the module is dependency-free again.
 
 ## How To Extend Safely
 

@@ -26,6 +26,10 @@ This repository builds three Go binaries:
 - `autodale`: monitoring, scheduled tasks, QA checks, SSH checks, and local AI operator reports.
 - `comdale`: approval-gated drafts, campaign plans, and profile-based repo scanning.
 
+Masterdale builds with the Go standard library only: `go.mod` declares no
+third-party dependencies, so builds work fully offline. Optional OIDC browser
+sign-in is implemented directly on `net/http` and `crypto`.
+
 ## Quick Start
 
 Prerequisites:
@@ -63,6 +67,8 @@ go run ./cmd/dale git audit
 go run ./cmd/dale fleet devices
 go run ./cmd/dale remote list --device <device>
 go run ./cmd/dale remote search --device <device> --query TODO
+go run ./cmd/dale fleet ssh                              # SSH bootstrap status
+go run ./cmd/dale fleet ssh setup --device <device>      # token -> passwordless ssh
 
 go run ./cmd/autodale monitor sample
 go run ./cmd/autodale monitor daily --kwh-cost 0.40
