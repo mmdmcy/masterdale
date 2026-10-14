@@ -333,8 +333,13 @@ func LinuxMiceActionsEnabled() bool {
 
 // RunLinuxMiceView runs one lmice command and keeps its JSON.
 func RunLinuxMiceView(ctx context.Context, name string, args []string, timeout time.Duration) LinuxMiceView {
+	return runLinuxMiceWith(ctx, LinuxMiceBinary(), name, args, timeout)
+}
+
+// runLinuxMiceWith runs one lmice command with a binary chosen by the caller,
+// so a background job keeps the binary it was started with.
+func runLinuxMiceWith(ctx context.Context, binary, name string, args []string, timeout time.Duration) LinuxMiceView {
 	view := LinuxMiceView{View: name, GeneratedAt: time.Now().UTC().Format(time.RFC3339)}
-	binary := LinuxMiceBinary()
 	if binary == "" {
 		view.Hint = "install lmice (LinuxMice) into ~/.local/bin to see fleet workspace views here"
 		return view
@@ -444,9 +449,12 @@ func (c *linuxmiceCache) start(kind string, args []string, changes bool) (LinuxM
 	if changes {
 		timeout = linuxmiceRunTimeout
 	}
+	// Resolved now, not when the goroutine runs: the job must use the lmice
+	// it was started with even if the environment changes meanwhile.
+	binary := LinuxMiceBinary()
 	go func() {
 		// Changes must finish even if the browser goes away.
-		view := RunLinuxMiceView(context.Background(), kind, args, timeout)
+		view := runLinuxMiceWith(context.Background(), binary, kind, args, timeout)
 		c.mu.Lock()
 		defer c.mu.Unlock()
 		job.View = view

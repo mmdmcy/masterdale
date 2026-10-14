@@ -86,8 +86,18 @@ func TestLinuxMiceViewsPassJSONThroughAndValidateInput(t *testing.T) {
 }
 
 func TestLinuxMiceViewWithoutBinaryIsUnavailable(t *testing.T) {
+	// No lmice anywhere this process could find one, so nothing real runs.
+	t.Setenv("DALE_LMICE", "")
+	t.Setenv("PATH", t.TempDir())
+	t.Setenv("HOME", t.TempDir())
+	if LinuxMiceBinary() != "" && LinuxMiceBinary() != "/usr/local/bin/lmice" && LinuxMiceBinary() != "/usr/bin/lmice" {
+		t.Fatalf("unexpected lmice: %s", LinuxMiceBinary())
+	}
+	if LinuxMiceBinary() != "" {
+		t.Skip("a system-wide lmice is installed")
+	}
 	view := RunLinuxMiceView(t.Context(), "map", linuxmiceViews["map"], linuxmiceTimeout)
-	if LinuxMiceBinary() == "" && (view.Available || view.Hint == "") {
+	if view.Available || view.Hint == "" {
 		t.Fatalf("missing lmice should be reported as unavailable with a hint: %+v", view)
 	}
 }
@@ -166,5 +176,27 @@ func TestLinuxMiceJobsPlanFreelyAndChangeOnlyWhenAllowed(t *testing.T) {
 	_ = json.Unmarshal(w.Body.Bytes(), &job)
 	if !job.Changes || job.Command != "lmice integrations disable gitdcy --device lawnmower --format json" {
 		t.Fatalf("unexpected change job: %+v", job)
+	}
+	// Wait for the change to run against the fake lmice before the test's
+	// environment (DALE_LMICE) is restored; it must never reach a real one.
+	waitForJob(t, server, job.ID)
+	args, _ := os.ReadFile(argsFile)
+	if got := strings.Join(strings.Fields(string(args)), " "); got != "integrations disable gitdcy --device lawnmower --format json" {
+		t.Fatalf("change job did not run against the fake lmice: %q", got)
+	}
+}
+
+func waitForJob(t *testing.T, server *Server, id string) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		current, _ := server.linuxmice.job(id)
+		if current.State != "running" {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("job did not finish")
+		}
+		time.Sleep(20 * time.Millisecond)
 	}
 }
