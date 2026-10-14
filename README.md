@@ -65,9 +65,13 @@ http://127.0.0.1:7345/dashboard
 With [LinuxMice](https://github.com/mmdmcy/linuxmice) installed, `http://127.0.0.1:7345/fleet`
 shows its read-only views. The page is a thin wrapper: each view runs a fixed
 `lmice ... --format json` command (shown on the page) and passes its JSON
-through `GET /v1/linuxmice/{map,integrations,selfhost,diff}`, so anything the
-page shows can be reproduced from the CLI. Set `DALE_LMICE` to use a specific
-`lmice` binary.
+through `GET /v1/linuxmice/{map,devices,integrations,selfhost,rescue,diff}`, so
+anything the page shows can be reproduced from the CLI. Plans (sync, retire,
+carry) and changes run as background jobs under `/v1/linuxmice/jobs`; changes
+(`sync`/`carry --execute`, integration opt-outs) are refused unless the server
+sets `DALE_LINUXMICE_ACTIONS=1`, ask for confirmation showing the exact command,
+and run one at a time. Joining a new device asks for its password, so it stays
+a terminal command. Set `DALE_LMICE` to use a specific `lmice` binary.
 
 
 Useful commands:

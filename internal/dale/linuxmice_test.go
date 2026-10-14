@@ -1,6 +1,7 @@
 package dale
 
 import (
+	"bytes"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -8,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func linuxmiceTestServer(t *testing.T) *Server {
@@ -84,8 +86,85 @@ func TestLinuxMiceViewsPassJSONThroughAndValidateInput(t *testing.T) {
 }
 
 func TestLinuxMiceViewWithoutBinaryIsUnavailable(t *testing.T) {
-	view := RunLinuxMiceView(t.Context(), "map", linuxmiceViews["map"])
+	view := RunLinuxMiceView(t.Context(), "map", linuxmiceViews["map"], linuxmiceTimeout)
 	if LinuxMiceBinary() == "" && (view.Available || view.Hint == "") {
 		t.Fatalf("missing lmice should be reported as unavailable with a hint: %+v", view)
+	}
+}
+
+func postJob(t *testing.T, server *Server, body string, origin string) *httptest.ResponseRecorder {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodPost, "/v1/linuxmice/jobs", bytes.NewBufferString(body))
+	req.RemoteAddr = "127.0.0.1:12345"
+	req.Header.Set("Content-Type", "application/json")
+	if origin != "" {
+		req.Header.Set("Origin", origin)
+	}
+	w := httptest.NewRecorder()
+	server.Handler().ServeHTTP(w, req)
+	return w
+}
+
+func TestLinuxMiceJobsPlanFreelyAndChangeOnlyWhenAllowed(t *testing.T) {
+	dir := t.TempDir()
+	argsFile := filepath.Join(dir, "args")
+	fake := filepath.Join(dir, "lmice")
+	script := "#!/bin/sh\nprintf '%s\\n' \"$@\" > " + argsFile + "\nprintf '{\"schema_version\":\"linuxmice.workspace.sync.v1\"}'\n"
+	if err := os.WriteFile(fake, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("DALE_LMICE", fake)
+	t.Setenv("DALE_LINUXMICE_ACTIONS", "")
+	server := linuxmiceTestServer(t)
+
+	w := postJob(t, server, `{"kind":"plan-sync","a":"nitori","b":"lawnmower"}`, "")
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("plan job: %d %s", w.Code, w.Body.String())
+	}
+	var job LinuxMiceJob
+	_ = json.Unmarshal(w.Body.Bytes(), &job)
+	if job.Changes || job.Command != "lmice workspace sync nitori lawnmower --format json" {
+		t.Fatalf("unexpected plan job: %+v", job)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		current, _ := server.linuxmice.job(job.ID)
+		if current.State != "running" {
+			if current.State != "done" || !strings.Contains(string(current.View.Data), "sync.v1") {
+				t.Fatalf("plan job finished badly: %+v", current)
+			}
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("plan job did not finish")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+
+	if w := postJob(t, server, `{"kind":"execute-sync","a":"nitori","b":"lawnmower"}`, ""); w.Code != http.StatusForbidden {
+		t.Fatalf("execute without DALE_LINUXMICE_ACTIONS: want 403, got %d", w.Code)
+	}
+	if w := postJob(t, server, `{"kind":"plan-sync","a":"nitori","b":"lawnmower"}`, "https://evil.example"); w.Code != http.StatusForbidden {
+		t.Fatalf("cross-origin job: want 403, got %d", w.Code)
+	}
+	for _, body := range []string{
+		`{"kind":"plan-sync","a":"nitori","b":"nitori"}`,
+		`{"kind":"plan-sync","a":"-x","b":"lawnmower"}`,
+		`{"kind":"integration-enable","id":"Bad;id","device":"nitori"}`,
+		`{"kind":"rm"}`,
+	} {
+		if w := postJob(t, server, body, ""); w.Code != http.StatusBadRequest {
+			t.Fatalf("%s: want 400, got %d", body, w.Code)
+		}
+	}
+
+	t.Setenv("DALE_LINUXMICE_ACTIONS", "1")
+	w = postJob(t, server, `{"kind":"integration-disable","id":"gitdcy","device":"lawnmower"}`, "")
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("allowed change: %d %s", w.Code, w.Body.String())
+	}
+	_ = json.Unmarshal(w.Body.Bytes(), &job)
+	if !job.Changes || job.Command != "lmice integrations disable gitdcy --device lawnmower --format json" {
+		t.Fatalf("unexpected change job: %+v", job)
 	}
 }
