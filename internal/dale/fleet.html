@@ -564,7 +564,7 @@
         const notes = {
           "agents-start": "Keeps Claude Code Remote Control running as a user service; sessions you open from the Claude app or claude.ai/code run there.",
           "agents-stop": "Stops the Remote Control service; open sessions end.",
-          "agents-browser-on": "Registers a private headless browser for every new Claude session (downloads about 120 MB once).",
+          "agents-browser-on": "Registers a private headless browser for every new Claude session (downloads a browser, about 400 MB on disk, once).",
           "agents-browser-off": "New Claude sessions start without the agent browser.",
         };
         askConfirm(`lmice agents ${words} --device ${device} --yes --format json`, notes[kind], async () => {
