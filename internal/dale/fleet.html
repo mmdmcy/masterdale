@@ -258,8 +258,30 @@
       $("view").innerHTML = rows.length ? `<div class="scroll"><table><thead><tr><th>Folder</th><th>Verdict</th>${devices.map((d) => `<th>${esc(d)}</th>`).join("")}<th>Detail</th></tr></thead><tbody>${rows.map((f) => `<tr class="clickable" data-location="${esc(f.path)}"><td class="mono name" title="${esc(f.path)}">${esc(f.path)}</td><td>${pill(f.verdict.code)}</td>${devices.map((d) => cell(f, d)).join("")}<td class="detail">${esc(f.verdict.detail)}</td></tr>`).join("")}</tbody></table></div><p class="muted">Files inside Git checkouts are counted under Repositories. Click a row to compare two devices.</p>` : `<div class="empty">Nothing matches.</div>`;
     }
 
+    function healthCells(h) {
+      if (!h || !h.os) return `<td colspan="6" class="detail">${esc(h?.detail || "loading health…")}</td>`;
+      const disk = h.disks.reduce((worst, d) => (!worst || d.used_percent > worst.used_percent ? d : worst), null);
+      const hottest = h.temperatures.reduce((top, t) => (!top || t.celsius > top.celsius ? t : top), null);
+      const fan = h.fans[0];
+      return `<td>${h.load ? `${h.load[0].toFixed(1)} / ${h.cores} cores` : "—"}</td>` +
+        `<td>${h.memory ? `${h.memory.used_percent.toFixed(0)}%` : "—"}</td>` +
+        `<td>${disk ? `${disk.used_percent.toFixed(0)}% <span class="muted">${bytes(disk.available_kib * 1024)} free</span>` : "—"}</td>` +
+        `<td>${hottest ? `${hottest.celsius.toFixed(0)} °C` : `<span class="muted">n/a</span>`}</td>` +
+        `<td>${fan ? `${fan.rpm}${fan.max_rpm ? ` / ${fan.max_rpm}` : ""} rpm` : `<span class="muted">n/a</span>`}</td>` +
+        `<td class="detail">${esc(h.detail)}${h.top_processes.length ? `<br>busiest: ${esc(h.top_processes.slice(0, 3).map((p) => `${p.command} ${p.cpu_percent.toFixed(0)}%`).join(", "))}` : ""}${h.battery ? `<br>battery ${h.battery.percent}% ${esc(h.battery.state)}` : ""}</td>`;
+    }
     function renderDevices(data) {
-      $("view").innerHTML = `<div class="scroll"><table><thead><tr><th>Device</th><th>SSH</th><th>Target</th><th>Answered in</th><th>Detail</th></tr></thead><tbody>${data.devices.map((d) => `<tr><td>${esc(d.id)}</td><td>${pill(d.state)}</td><td class="mono">${esc(d.target)}</td><td>${d.duration_ms} ms</td><td class="detail">${esc(d.detail)}</td></tr>`).join("")}</tbody></table></div>
+      const health = state.views.health?.data?.devices || [];
+      if (!state.views.health && !state.healthLoading) {
+        state.healthLoading = true;
+        api("/v1/linuxmice/health").then((view) => { state.views.health = view; state.healthLoading = false; if (state.tab === "devices") render(); }).catch(() => { state.healthLoading = false; });
+      }
+      const healthMeta = state.views.health ? `<div class="meta">${meta(state.views.health)}</div>` : "";
+      $("view").innerHTML = healthMeta + `<div class="scroll"><table><thead><tr><th>Device</th><th>SSH</th><th>Health</th><th>CPU load</th><th>Memory</th><th>Disk</th><th>Temp</th><th>Fan</th><th>Detail</th></tr></thead><tbody>${data.devices.map((d) => {
+        const h = health.find((x) => x.device === d.id);
+        return `<tr><td>${esc(d.id)}<br><span class="muted mono">${esc(d.target)}</span></td><td>${pill(d.state)}<br><span class="muted">${d.duration_ms} ms</span></td><td>${h ? pill(h.status) : ""}</td>${healthCells(h)}</tr>`;
+      }).join("")}</tbody></table></div>
+        <p class="muted">Health comes from a small read-only probe (<code>lmice health --fleet</code>); macOS does not expose temperatures or fans without extra tools.</p>
         <h3>Add a new device</h3>
         <div class="panel">
           <p>Joining asks for the new device's password once, so it runs in a terminal, not here:</p>
@@ -476,7 +498,7 @@
     $("hostDevice").addEventListener("change", () => { state.selfhostDevice = $("hostDevice").value; load(false); });
     $("search").addEventListener("input", render);
     $("verdict").addEventListener("change", render);
-    $("refresh").addEventListener("click", () => { if (state.tab === "move") { state.move.result = null; } load(true); });
+    $("refresh").addEventListener("click", () => { if (state.tab === "move") { state.move.result = null; } if (state.tab === "devices") { state.views.health = null; } load(true); });
     $("diffRun").addEventListener("click", runDiff);
     $("diffPatch").addEventListener("change", runDiff);
     $("diffClose").addEventListener("click", () => $("diffDialog").close());

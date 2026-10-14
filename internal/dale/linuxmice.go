@@ -48,6 +48,7 @@ var linuxmiceViews = map[string][]string{
 	"selfhost":     {"selfhost", "--format", "json"},
 	"devices":      {"fleet", "status", "--format", "json"},
 	"rescue":       {"rescue", "status", "--format", "json"},
+	"health":       {"health", "--fleet", "--format", "json"},
 	// Not served as a view: names this node for the page.
 	"integrations-local": {"integrations", "--format", "json"},
 }
