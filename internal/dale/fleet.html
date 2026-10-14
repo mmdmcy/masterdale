@@ -89,6 +89,7 @@
       <button data-tab="folders" type="button">Folders</button>
       <button data-tab="devices" type="button">Devices</button>
       <button data-tab="move" type="button">Sync &amp; move</button>
+      <button data-tab="tools" type="button">Tools</button>
       <button data-tab="integrations" type="button">Integrations</button>
       <button data-tab="selfhost" type="button">Self-hosting</button>
       <button data-tab="rescue" type="button">Health</button>
@@ -206,7 +207,7 @@
       const name = viewName();
       const view = state.tab === "selfhost" ? state.views[`selfhost:${state.selfhostDevice}`] : state.views[name];
       $("verdict").style.display = state.tab === "repos" || state.tab === "folders" ? "" : "none";
-      $("search").style.display = ["repos", "folders", "selfhost", "integrations"].includes(state.tab) ? "" : "none";
+      $("search").style.display = ["repos", "folders", "selfhost", "integrations", "tools"].includes(state.tab) ? "" : "none";
       $("hostDevice").style.display = state.tab === "selfhost" ? "" : "none";
       $("meta").innerHTML = meta(view);
       $("cards").innerHTML = "";
@@ -214,7 +215,7 @@
         $("view").innerHTML = `<div class="empty">${esc(view?.error || view?.hint || "No data")}</div>`;
         return;
       }
-      ({ repos: renderRepos, folders: renderFolders, devices: renderDevices, move: renderMove, integrations: renderIntegrations, selfhost: renderSelfhost, rescue: renderRescue })[state.tab](view.data);
+      ({ repos: renderRepos, folders: renderFolders, devices: renderDevices, move: renderMove, tools: renderTools, integrations: renderIntegrations, selfhost: renderSelfhost, rescue: renderRescue })[state.tab](view.data);
     }
 
     function deviceCards(data) {
@@ -371,6 +372,20 @@
       if (state.tab === "move") renderMove();
     }
 
+    function renderTools(data) {
+      const text = filterText();
+      const canChange = state.caps?.actions_enabled;
+      $("view").innerHTML = data.devices.map((d) => {
+        if (d.status !== "ok") return `<div class="card" style="margin-bottom:8px"><strong>${esc(d.device)} ${pill(d.status === "offline" ? "offline" : "error")}</strong><span>${esc(d.detail)}</span></div>`;
+        const rows = d.tools.filter((t) => t.state !== "not-installed" && (!text || t.name.includes(text)));
+        return `<h3>${esc(d.device)} <span class="muted">${esc(d.detail)}</span></h3><div class="scroll" style="margin-bottom:16px"><table><thead><tr><th>Tool</th><th>State</th><th>Running</th><th>Autostart</th><th>Detail</th><th></th></tr></thead><tbody>${rows.map((t) => {
+          const update = t.state === "outdated" && t.updatable ? `<button data-tool="${esc(t.name)}" data-device="${esc(d.device)}" type="button" ${canChange ? "" : "disabled"}>Update</button>` : "";
+          const dirty = t.uncommitted_changes ? `<br><span class="muted">${t.uncommitted_changes} uncommitted change(s) in the checkout would be built in</span>` : "";
+          return `<tr><td>${esc(t.name)}</td><td>${pill(t.state === "current" ? "same" : t.state === "outdated" ? "behind" : t.state)}</td><td>${t.running ? "yes" : "—"}</td><td>${t.autostart ? "yes" : "—"}</td><td class="detail">${esc(t.updatable || t.state !== "outdated" ? t.detail : t.detail + "; deployed by Plugroot")}${dirty}</td><td>${update}</td></tr>`;
+        }).join("")}</tbody></table></div>`;
+      }).join("") + `<p class="muted">Tools are built from each device's own checkout in ~/Documents/github; the previous install is kept as a backup and a running tool is restarted (<code>lmice tools update NAME --device DEVICE</code>).</p>`;
+    }
+
     function renderIntegrations(data) {
       const text = filterText();
       const canChange = state.caps?.actions_enabled;
@@ -489,6 +504,19 @@
           ? `Nothing is deleted. Uncommitted work moves to ${m.b}; ${m.a}'s copy of each moved checkout is saved under refs/lmice/switched/ (git stash apply restores it).`
           : "Nothing is deleted; replaced files are archived first, and the result is checked again afterwards.";
         askConfirm(command, note, () => runMoveJob(execute.dataset.execute));
+        return;
+      }
+      const tool = event.target.closest("button[data-tool]");
+      if (tool) {
+        const { tool: id, device } = tool.dataset;
+        askConfirm(`lmice tools update ${id} --device ${device} --yes --format json`, "Builds from that device's checkout; the previous install is kept as a backup and the tool is restarted if it was running. This can take a few minutes.", async () => {
+          $("meta").textContent = `updating ${id} on ${device}…`;
+          try {
+            const job = await startJob({ kind: "tool-update", id, device });
+            if (job.view?.data && job.view.data.success === false) $("meta").textContent = `update failed: ${job.view.data.output || ""}`;
+          } catch (error) { $("meta").textContent = `failed: ${error.message}`; return; }
+          load(true);
+        });
         return;
       }
       const toggle = event.target.closest("button[data-integration]");
