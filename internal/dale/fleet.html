@@ -1,0 +1,299 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Fleet Workspace</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #f6f7f8;
+      --surface: #ffffff;
+      --surface-2: #f0f2f5;
+      --line: #d8dde5;
+      --text: #1f2328;
+      --muted: #66707c;
+      --accent: #2f6fd6;
+      --ok: #1f7a4d;
+      --warn: #8a6400;
+      --bad: #b42318;
+      --radius: 8px;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #101112;
+        --surface: #171819;
+        --surface-2: #202225;
+        --line: #30343a;
+        --text: #f1f3f5;
+        --muted: #a4abb4;
+        --accent: #74a7ff;
+        --ok: #5cc98f;
+        --warn: #e0b84f;
+        --bad: #ff7b72;
+      }
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--text); font-size: 14px; }
+    header { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; padding: 14px 16px; border-bottom: 1px solid var(--line); background: var(--surface); }
+    header h1 { margin: 0; font-size: 17px; }
+    header a { color: var(--accent); text-decoration: none; }
+    main { padding: 16px; max-width: 1400px; margin: 0 auto; }
+    .tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+    .tabs button, .toolbar button, .toolbar select, .toolbar input { font: inherit; padding: 6px 10px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); color: var(--text); }
+    .tabs button.active { border-color: var(--accent); color: var(--accent); }
+    .toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
+    .toolbar input { min-width: 0; flex: 1 1 180px; }
+    .meta { color: var(--muted); font-size: 12px; margin-bottom: 10px; }
+    .meta code { font-size: 12px; }
+    .cards { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+    .card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 8px 12px; min-width: 150px; }
+    .card strong { display: block; }
+    .card span { color: var(--muted); font-size: 12px; }
+    .scroll { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; vertical-align: top; }
+    th { background: var(--surface-2); font-weight: 600; position: sticky; top: 0; }
+    tr.clickable { cursor: pointer; }
+    tr.clickable:hover td { background: var(--surface-2); }
+    td.detail { white-space: normal; min-width: 220px; color: var(--muted); }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+    .pill { display: inline-block; padding: 1px 8px; border-radius: 999px; border: 1px solid var(--line); font-size: 12px; }
+    .pill.ok { color: var(--ok); }
+    .pill.warn { color: var(--warn); }
+    .pill.bad { color: var(--bad); }
+    .muted { color: var(--muted); }
+    .empty { padding: 24px; color: var(--muted); }
+    dialog { width: min(1000px, calc(100vw - 32px)); max-height: calc(100vh - 32px); border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); color: var(--text); padding: 0; }
+    dialog .head { display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--line); gap: 8px; flex-wrap: wrap; }
+    dialog .body { padding: 12px 16px; overflow: auto; max-height: calc(100vh - 140px); }
+    pre { white-space: pre-wrap; word-break: break-word; margin: 0; }
+    @media (max-width: 640px) { main { padding: 12px 16px; } th, td { padding: 6px 8px; } }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Fleet workspace</h1>
+    <span class="muted">LinuxMice views, read-only · <a href="/dashboard">Dashboard</a></span>
+  </header>
+  <main>
+    <div class="tabs" id="tabs">
+      <button data-tab="repos" class="active" type="button">Repositories</button>
+      <button data-tab="folders" type="button">Folders</button>
+      <button data-tab="integrations" type="button">Integrations</button>
+      <button data-tab="selfhost" type="button">Self-hosting</button>
+    </div>
+    <div class="toolbar">
+      <input id="search" type="search" placeholder="Filter by name or path" aria-label="Filter">
+      <select id="verdict" aria-label="Verdict"><option value="">All verdicts</option><option value="!same" selected>Needs a look (not same)</option></select>
+      <button id="refresh" type="button">Refresh</button>
+    </div>
+    <div class="meta" id="meta">loading…</div>
+    <div class="cards" id="cards"></div>
+    <div id="view"></div>
+  </main>
+  <dialog id="diffDialog">
+    <div class="head">
+      <strong id="diffTitle">Diff</strong>
+      <span class="toolbar" style="margin:0">
+        <select id="diffA" aria-label="First device"></select>
+        <select id="diffB" aria-label="Second device"></select>
+        <button id="diffRun" type="button">Compare</button>
+        <button id="diffClose" type="button">Close</button>
+      </span>
+    </div>
+    <div class="body" id="diffBody"></div>
+  </dialog>
+  <script>
+    const state = { tab: "repos", map: null, integrations: null, selfhost: null, location: "" };
+    const $ = (id) => document.getElementById(id);
+
+    function authHeaders() {
+      const token = localStorage.getItem("masterdale.dashboard.token") || "";
+      return token ? { "Authorization": `Bearer ${token}` } : {};
+    }
+    async function api(path) {
+      let res = await fetch(path, { headers: authHeaders() });
+      if (res.status === 401) {
+        if (res.headers.get("X-Masterdale-OIDC") === "enabled") { window.location.assign("/auth/oidc/start"); throw new Error("signing in"); }
+        const token = window.prompt("Masterdale token");
+        if (token) { localStorage.setItem("masterdale.dashboard.token", token.trim()); res = await fetch(path, { headers: authHeaders() }); }
+      }
+      if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
+      return res.json();
+    }
+    function esc(value) { return String(value ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
+    function bytes(n) { if (!n) return "0 B"; const u = ["B", "KB", "MB", "GB", "TB"]; let i = 0; while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; } return `${n.toFixed(i ? 1 : 0)} ${u[i]}`; }
+    function pill(code) {
+      const level = { same: "ok", ok: "ok", online: "ok", active: "ok", repository: "", dirty: "warn", behind: "warn", differs: "warn", "only-on": "warn", attention: "warn", disabled: "", "not-installed": "", diverged: "bad", unknown: "bad", offline: "bad", unhealthy: "bad", error: "bad", "endpoint-outdated": "bad" }[code] ?? "";
+      return `<span class="pill ${level}">${esc(code)}</span>`;
+    }
+    function meta(view) {
+      if (!view) return "";
+      const when = view.generated_at ? new Date(view.generated_at).toLocaleTimeString() : "";
+      return view.available
+        ? `<code>${esc(view.command)}</code> · ${esc(when)} · ${(view.duration_ms / 1000).toFixed(1)}s`
+        : esc(view.hint || "LinuxMice is not installed on this node");
+    }
+    function filterText() { return $("search").value.trim().toLowerCase(); }
+    function verdictFilter(code) {
+      const want = $("verdict").value;
+      if (!want) return true;
+      if (want === "!same") return code !== "same";
+      return code === want;
+    }
+
+    async function load(force) {
+      const name = state.tab === "repos" || state.tab === "folders" ? "map" : state.tab;
+      if (!force && state[name]) { render(); return; }
+      $("meta").textContent = name === "map" ? "collecting manifests from every fleet device (about a minute)…" : "loading…";
+      $("view").innerHTML = "";
+      $("cards").innerHTML = "";
+      try {
+        state[name] = await api(`/v1/linuxmice/${name}${force ? "?refresh=1" : ""}`);
+      } catch (error) {
+        $("meta").textContent = `failed: ${error.message}`;
+        return;
+      }
+      render();
+    }
+
+    function render() {
+      const name = state.tab === "repos" || state.tab === "folders" ? "map" : state.tab;
+      const view = state[name];
+      $("meta").innerHTML = meta(view);
+      $("verdict").parentElement.style.display = "";
+      if (!view || !view.data) {
+        $("view").innerHTML = `<div class="empty">${esc(view?.error || view?.hint || "No data")}</div>`;
+        return;
+      }
+      if (state.tab === "repos") renderRepos(view.data);
+      if (state.tab === "folders") renderFolders(view.data);
+      if (state.tab === "integrations") renderIntegrations(view.data);
+      if (state.tab === "selfhost") renderSelfhost(view.data);
+    }
+
+    function deviceCards(data) {
+      $("cards").innerHTML = data.devices.map((d) => `<div class="card"><strong>${esc(d.device)} ${pill(d.status)}</strong><span>${d.collected ? `${d.repositories} repos · ${d.files} files · ${bytes(d.bytes)}` : esc(d.detail)}</span></div>`).join("");
+    }
+    function verdictOptions(codes) {
+      const select = $("verdict");
+      const current = select.value;
+      select.innerHTML = `<option value="">All verdicts</option><option value="!same">Needs a look (not same)</option>` + Object.entries(codes).map(([code, n]) => `<option value="${esc(code)}">${esc(code)} (${n})</option>`).join("");
+      select.value = [...select.options].some((o) => o.value === current) ? current : "!same";
+    }
+
+    function renderRepos(data) {
+      deviceCards(data);
+      verdictOptions(data.counts.repository_verdicts);
+      const devices = data.devices.filter((d) => d.collected).map((d) => d.device);
+      const text = filterText();
+      const rows = data.repositories.filter((r) => verdictFilter(r.verdict.code) && (!text || `${r.name} ${r.checkouts.map((c) => c.path).join(" ")}`.toLowerCase().includes(text)));
+      const cell = (repo, device) => {
+        const c = repo.checkouts.find((x) => x.device === device);
+        if (!c) return `<td class="muted">—</td>`;
+        if (c.error) return `<td class="mono" title="${esc(c.error)}">error</td>`;
+        const marks = [c.dirty_entries ? `*${c.dirty_entries}` : "", c.stash_entries ? `s${c.stash_entries}` : "", c.local_only_commits ? `+${c.local_only_commits}` : ""].filter(Boolean).join(" ");
+        return `<td class="mono" title="${esc(c.path)}">${esc(c.branch || "detached")} ${esc(c.head_short || "")} <span style="color:var(--warn)">${esc(marks)}</span></td>`;
+      };
+      $("view").innerHTML = rows.length ? `<div class="scroll"><table><thead><tr><th>Repository</th>${devices.map((d) => `<th>${esc(d)}</th>`).join("")}<th>Verdict</th><th>Detail</th></tr></thead><tbody>${rows.map((r) => `<tr class="clickable" data-location="${esc(r.checkouts[0]?.path || "")}"><td>${esc(r.name)}</td>${devices.map((d) => cell(r, d)).join("")}<td>${pill(r.verdict.code)}</td><td class="detail">${esc(r.verdict.detail)}</td></tr>`).join("")}</tbody></table></div><p class="muted">*N uncommitted · sN stashes · +N local-only commits. Click a row to compare two devices.</p>` : `<div class="empty">Nothing matches.</div>`;
+    }
+
+    function renderFolders(data) {
+      deviceCards(data);
+      verdictOptions(data.counts.folder_verdicts);
+      const devices = data.devices.filter((d) => d.collected).map((d) => d.device);
+      const text = filterText();
+      const rows = data.folders.filter((f) => verdictFilter(f.verdict.code) && (!text || f.path.toLowerCase().includes(text)));
+      const cell = (folder, device) => {
+        const d = folder.devices.find((x) => x.device === device);
+        if (!d || !d.present) return `<td class="muted">—</td>`;
+        if (folder.is_repository) return `<td class="muted">repo</td>`;
+        return `<td>${d.files} files · ${bytes(d.bytes)}${d.repositories ? ` · ${d.repositories} repos` : ""}</td>`;
+      };
+      $("view").innerHTML = rows.length ? `<div class="scroll"><table><thead><tr><th>Folder</th>${devices.map((d) => `<th>${esc(d)}</th>`).join("")}<th>Verdict</th><th>Detail</th></tr></thead><tbody>${rows.map((f) => `<tr class="clickable" data-location="${esc(f.path)}"><td class="mono">${esc(f.path)}</td>${devices.map((d) => cell(f, d)).join("")}<td>${pill(f.verdict.code)}</td><td class="detail">${esc(f.verdict.detail)}</td></tr>`).join("")}</tbody></table></div><p class="muted">Files inside Git checkouts are counted under Repositories. Click a row to compare two devices.</p>` : `<div class="empty">Nothing matches.</div>`;
+    }
+
+    function renderIntegrations(data) {
+      $("verdict").parentElement.style.display = "none";
+      $("view").innerHTML = data.devices.map((d) => {
+        if (!d.report) return `<div class="card" style="margin-bottom:8px"><strong>${esc(d.device)} ${pill(d.status)}</strong><span>${esc(d.detail)}</span></div>`;
+        return `<h3>${esc(d.device)}</h3><div class="scroll" style="margin-bottom:16px"><table><thead><tr><th>Integration</th><th>State</th><th>Used for</th><th>Detail</th></tr></thead><tbody>${d.report.integrations.map((i) => `<tr><td>${esc(i.display_name)}</td><td>${pill(i.state)}${i.configured ? "" : ` <span class="muted">not set up</span>`}</td><td class="detail">${esc(i.purpose)}</td><td class="detail">${esc(i.state === "active" ? i.detail : `${i.detail} → ${i.hint}`)}</td></tr>`).join("")}</tbody></table></div>`;
+      }).join("");
+    }
+
+    function renderSelfhost(data) {
+      $("verdict").parentElement.style.display = "none";
+      const text = filterText();
+      const services = data.services.filter((s) => !text || `${s.id} ${s.name}`.toLowerCase().includes(text));
+      const checks = data.checks.filter((c) => c.severity !== "ok");
+      $("cards").innerHTML = `<div class="card"><strong>${esc(data.device)} ${pill(data.status)}</strong><span>${esc(data.detail)}</span></div>`;
+      $("view").innerHTML = `<div class="scroll"><table><thead><tr><th>Service</th><th>State</th><th>Kind</th><th>Ports</th><th>Detail</th></tr></thead><tbody>${services.map((s) => `<tr><td>${s.url ? `<a href="${esc(s.url)}" style="color:var(--accent)">${esc(s.name || s.id)}</a>` : esc(s.name || s.id)}${s.optional ? ` <span class="muted">optional</span>` : ""}</td><td>${pill(s.state)}</td><td>${esc(s.kind)}</td><td class="detail">${esc(s.ports.join(", "))}</td><td class="detail">${esc(s.detail)}</td></tr>`).join("")}</tbody></table></div>` +
+        (checks.length ? `<h3>Plugroot doctor</h3><div class="scroll"><table><tbody>${checks.map((c) => `<tr><td>${pill(c.severity === "warn" ? "attention" : "error")}</td><td>${esc(c.check)}</td><td class="detail">${esc(c.message)}</td></tr>`).join("")}</tbody></table></div>` : "") +
+        `<p class="muted">Plugroot owns these services; manage them with <code>plugroot</code> on the device.</p>`;
+    }
+
+    function openDiff(location) {
+      const devices = (state.map?.data?.devices || []).filter((d) => d.collected).map((d) => d.device);
+      if (devices.length < 2) return;
+      state.location = location;
+      const local = state.map.data.local_device;
+      const first = devices.includes(local) ? local : devices[0];
+      const second = devices.find((d) => d !== first);
+      $("diffA").innerHTML = devices.map((d) => `<option ${d === first ? "selected" : ""}>${esc(d)}</option>`).join("");
+      $("diffB").innerHTML = devices.map((d) => `<option ${d === second ? "selected" : ""}>${esc(d)}</option>`).join("");
+      $("diffTitle").textContent = location;
+      $("diffBody").innerHTML = "";
+      $("diffDialog").showModal();
+      runDiff();
+    }
+    async function runDiff() {
+      const a = $("diffA").value, b = $("diffB").value;
+      if (a === b) { $("diffBody").innerHTML = `<div class="empty">Pick two different devices.</div>`; return; }
+      $("diffBody").innerHTML = `<div class="empty">comparing ${esc(a)} and ${esc(b)}…</div>`;
+      try {
+        const view = await api(`/v1/linuxmice/diff?location=${encodeURIComponent(state.location)}&a=${encodeURIComponent(a)}&b=${encodeURIComponent(b)}`);
+        $("diffBody").innerHTML = `<div class="meta">${meta(view)}</div>` + (view.data ? renderDiff(view.data) : `<div class="empty">${esc(view.error || view.hint)}</div>`);
+      } catch (error) {
+        $("diffBody").innerHTML = `<div class="empty">failed: ${esc(error.message)}</div>`;
+      }
+    }
+    function renderDiff(d) {
+      let html = `<p>${pill(d.relation.code)} ${esc(d.relation.detail)}</p>`;
+      if (d.repository) {
+        html += d.repository.sides.map((s) => `<h3>${esc(s.device)}</h3>` + (!s.present ? `<p class="muted">not present</p>` :
+          `<p class="mono">${esc(s.branch || "detached")} ${esc((s.head || "").slice(0, 10))}${s.upstream ? ` · ${esc(s.upstream)} +${s.upstream_ahead}/-${s.upstream_behind}` : ""}</p>` +
+          (s.commits_only_here?.length ? `<p><strong>${s.commits_only_here_count} commit(s) only here</strong></p><pre class="mono">${s.commits_only_here.map((c) => `${esc(c.id.slice(0, 10))} ${esc(c.subject)}`).join("\n")}</pre>` : "") +
+          (s.dirty_files?.length ? `<p><strong>Uncommitted (${s.dirty_entries})</strong></p><pre class="mono">${s.dirty_files.map((f) => `${esc(f.status)} ${esc(f.path)}`).join("\n")}</pre>` : "") +
+          (s.stashes?.length ? `<p><strong>Stashes</strong></p><pre class="mono">${s.stashes.map(esc).join("\n")}</pre>` : "") +
+          (s.probe_error ? `<p class="muted">${esc(s.probe_error)}</p>` : ""))).join("");
+      }
+      if (d.folder) {
+        html += `<p class="muted">${d.folder.identical_count} identical, ${d.folder.differing_count} differing</p>`;
+        html += d.folder.sides.map((s) => `<h3>${esc(s.device)}: ${s.only_here_count} only here</h3>` + (s.only_here?.length ? `<pre class="mono">${s.only_here.map((f) => `${esc(f.path)}  ${bytes(f.size)}`).join("\n")}</pre>` : "")).join("");
+        if (d.folder.differing?.length) html += `<h3>Differing</h3><pre class="mono">${d.folder.differing.map((f) => `${esc(f.path)}  newer on ${esc(f.newer_on || "?")}`).join("\n")}</pre>`;
+      }
+      return html;
+    }
+
+    $("tabs").addEventListener("click", (event) => {
+      const button = event.target.closest("button[data-tab]");
+      if (!button) return;
+      state.tab = button.dataset.tab;
+      document.querySelectorAll("#tabs button").forEach((b) => b.classList.toggle("active", b === button));
+      load(false);
+    });
+    $("view").addEventListener("click", (event) => {
+      const row = event.target.closest("tr[data-location]");
+      if (row && row.dataset.location) openDiff(row.dataset.location);
+    });
+    $("search").addEventListener("input", render);
+    $("verdict").addEventListener("change", render);
+    $("refresh").addEventListener("click", () => load(true));
+    $("diffRun").addEventListener("click", runDiff);
+    $("diffClose").addEventListener("click", () => $("diffDialog").close());
+    load(false);
+  </script>
+</body>
+</html>

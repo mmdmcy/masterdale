@@ -17,6 +17,8 @@ The project is designed for small teams, labs, homelabs, and edge environments t
 - Produces local AI operator reports with deterministic fallbacks.
 - Drafts commerce/content material through explicit approval gates.
 - Keeps remote command execution disabled unless explicitly enabled.
+- Shows LinuxMice fleet views at `/fleet` when `lmice` is installed: repositories and
+  folders across devices, per-location diffs, integrations and Plugroot-hosted services.
 
 ## Commands
 
@@ -59,6 +61,14 @@ Then visit:
 ```text
 http://127.0.0.1:7345/dashboard
 ```
+
+With [LinuxMice](https://github.com/mmdmcy/linuxmice) installed, `http://127.0.0.1:7345/fleet`
+shows its read-only views. The page is a thin wrapper: each view runs a fixed
+`lmice ... --format json` command (shown on the page) and passes its JSON
+through `GET /v1/linuxmice/{map,integrations,selfhost,diff}`, so anything the
+page shows can be reproduced from the CLI. Set `DALE_LMICE` to use a specific
+`lmice` binary.
+
 
 Useful commands:
 

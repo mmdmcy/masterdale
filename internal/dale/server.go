@@ -32,13 +32,15 @@ type Server struct {
 	store          *Store
 	mux            *http.ServeMux
 	dashboardCache *dashboardCache
+	linuxmice      *linuxmiceCache
 	oidc           *oidcRuntime
 }
 
 func NewServer(cfg Config, store *Store) *Server {
 	s := &Server{
 		cfg: cfg, store: store, mux: http.NewServeMux(), dashboardCache: newDashboardCache(),
-		oidc: newOIDCRuntime(cfg.OIDC),
+		linuxmice: &linuxmiceCache{},
+		oidc:      newOIDCRuntime(cfg.OIDC),
 	}
 	s.routes()
 	return s
@@ -213,6 +215,7 @@ func mustCIDR(value string) *net.IPNet {
 func (s *Server) routes() {
 	s.mux.HandleFunc("/", s.handleDashboardRoot)
 	s.mux.HandleFunc("/dashboard", s.handleDashboard)
+	s.mux.HandleFunc("/fleet", s.handleFleetPage)
 	s.mux.HandleFunc("/v1/dashboard", s.handleDashboardData)
 	s.mux.HandleFunc("/v1/dashboard/ask", s.handleDashboardAsk)
 	s.mux.HandleFunc("/healthz", s.handleHealth)
@@ -229,6 +232,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("/v1/fs/search", s.handleFSSearch)
 	s.mux.HandleFunc("/v1/git/audit", s.handleGitAudit)
 	s.mux.HandleFunc("/v1/exec", s.handleExec)
+	s.mux.HandleFunc("/v1/linuxmice/", s.handleLinuxMice)
 	s.mux.HandleFunc("/mcp", s.handleMCP)
 }
 
