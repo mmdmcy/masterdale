@@ -74,7 +74,8 @@ type LinuxMiceView struct {
 
 // LinuxMiceJobRequest asks for one plan or change.
 type LinuxMiceJobRequest struct {
-	// plan-sync, plan-retire, plan-carry, execute-sync, execute-carry,
+	// plan-sync, plan-switch, plan-retire, plan-carry, execute-sync,
+	// execute-switch, execute-carry,
 	// integration-enable or integration-disable.
 	Kind   string `json:"kind"`
 	A      string `json:"a,omitempty"`
@@ -244,6 +245,15 @@ func linuxmiceJobArgs(req LinuxMiceJobRequest) ([]string, bool, error) {
 		}
 		args := []string{"workspace", "sync", req.A, req.B, "--format", "json"}
 		if req.Kind == "execute-sync" {
+			return append(args, "--execute"), true, nil
+		}
+		return args, false, nil
+	case "plan-switch", "execute-switch":
+		if err := pair(); err != nil {
+			return nil, false, err
+		}
+		args := []string{"workspace", "switch", req.B, "--from", req.A, "--format", "json"}
+		if req.Kind == "execute-switch" {
 			return append(args, "--execute"), true, nil
 		}
 		return args, false, nil

@@ -304,6 +304,7 @@
           <label>Device <select id="moveA">${devices.map((d) => option(d, m.a)).join("")}</select></label>
           <label>and <select id="moveB">${devices.map((d) => option(d, m.b)).join("")}</select></label>
           <button data-plan="plan-sync" class="primary" type="button" ${m.running ? "disabled" : ""}>Plan sync (both ways)</button>
+          <button data-plan="plan-switch" type="button" ${m.running ? "disabled" : ""}>Move my work ${esc(m.a)} → ${esc(m.b)} (switch)</button>
           <button data-plan="plan-retire" type="button" ${m.running ? "disabled" : ""}>Can I switch off ${esc(m.a)}? (retire)</button>
           <button data-plan="plan-carry" type="button" ${m.running ? "disabled" : ""}>Plan carry ${esc(m.a)} → ${esc(m.b)}</button>
         </div>
@@ -318,6 +319,15 @@
       let html = `<div class="meta">${meta(view)}</div>`;
       if (!view.data) return html + `<div class="empty">${esc(view.error || view.hint || job.state)}</div>`;
       const d = view.data;
+      if (d.schema_version === "linuxmice.workspace.switch.v1") {
+        const inner = renderJobResult({ view: Object.assign({}, view, { data: d.sync }) }, false).replace(/^<div class="meta">.*?<\/div>/, "");
+        html += `<p>Switch ${esc(d.from)} → ${esc(d.to)}${d.executed ? " (done)" : " (plan)"}</p>` + inner;
+        const items = (title, list) => list.length ? `<h3>${esc(title)}</h3><div class="scroll"><table><tbody>${list.map((i) => `<tr><td class="mono name" title="${esc(i.location)}">${esc(i.location)}</td><td class="detail">${esc(i.detail)}</td></tr>`).join("")}</tbody></table></div>` : "";
+        html += items(`Work that continues on ${d.to}`, d.moved) + items(`Uncommitted work on ${d.from}`, d.stays);
+        html += `<h3>Continue on ${esc(d.to)}</h3><pre class="mono panel">${d.continue_with.map(esc).join("\n")}</pre>`;
+        if (!d.executed && canExecute) html += `<button class="danger" data-execute="execute-switch" type="button">Run this switch…</button>`;
+        return html;
+      }
       if (d.schema_version === "linuxmice.workspace.sync.v1") {
         const steps = d.directions.reduce((n, dir) => n + dir.steps.length, 0);
         html += `<p>${d.executed ? (d.in_sync ? pill("same") + " in sync" : pill("attention") + " not fully in sync") : `${steps} step(s) planned`} · folders: <span class="mono">${esc(d.roots.join(", "))}</span></p>`;
@@ -470,8 +480,15 @@
       const execute = event.target.closest("button[data-execute]");
       if (execute) {
         const m = state.move;
-        const command = execute.dataset.execute === "execute-sync" ? `lmice workspace sync ${m.a} ${m.b} --format json --execute` : `lmice workspace carry ${m.a} --to ${m.b} --format json --execute`;
-        askConfirm(command, "Nothing is deleted; replaced files are archived first, and the result is checked again afterwards.", () => runMoveJob(execute.dataset.execute));
+        const command = {
+          "execute-sync": `lmice workspace sync ${m.a} ${m.b} --format json --execute`,
+          "execute-switch": `lmice workspace switch ${m.b} --from ${m.a} --format json --execute`,
+          "execute-carry": `lmice workspace carry ${m.a} --to ${m.b} --format json --execute`,
+        }[execute.dataset.execute];
+        const note = execute.dataset.execute === "execute-switch"
+          ? `Nothing is deleted. Uncommitted work moves to ${m.b}; ${m.a}'s copy of each moved checkout is saved under refs/lmice/switched/ (git stash apply restores it).`
+          : "Nothing is deleted; replaced files are archived first, and the result is checked again afterwards.";
+        askConfirm(command, note, () => runMoveJob(execute.dataset.execute));
         return;
       }
       const toggle = event.target.closest("button[data-integration]");
