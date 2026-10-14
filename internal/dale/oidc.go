@@ -15,9 +15,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-
-	"github.com/coreos/go-oidc/v3/oidc"
-	"golang.org/x/oauth2"
 )
 
 const (
@@ -51,6 +48,7 @@ type oidcSession struct {
 
 type oidcRuntime struct {
 	config   *OIDCConfig
+	keySet   *oidcKeySet
 	mu       sync.Mutex
 	flows    map[string]oidcPendingFlow
 	sessions map[[32]byte]oidcSession
@@ -125,7 +123,8 @@ func newOIDCRuntime(config *OIDCConfig) *oidcRuntime {
 		return nil
 	}
 	return &oidcRuntime{
-		config: config, flows: make(map[string]oidcPendingFlow),
+		config: config, keySet: &oidcKeySet{},
+		flows:    make(map[string]oidcPendingFlow),
 		sessions: make(map[[32]byte]oidcSession),
 	}
 }
@@ -144,12 +143,11 @@ func (s *Server) handleOIDCStart(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	provider, oauthConfig, err := s.oidc.client(r.Context())
+	provider, err := s.oidc.provider(r.Context())
 	if err != nil {
 		http.Error(w, "LinuxMice sign-in is temporarily unavailable", http.StatusServiceUnavailable)
 		return
 	}
-	_ = provider
 	state, err := randomURLToken(32)
 	if err != nil {
 		http.Error(w, "Could not start sign-in", http.StatusInternalServerError)
@@ -183,12 +181,12 @@ func (s *Server) handleOIDCStart(w http.ResponseWriter, r *http.Request) {
 		SameSite: http.SameSiteLaxMode,
 	})
 	challenge := base64.RawURLEncoding.EncodeToString(sha256Bytes(verifier))
-	http.Redirect(w, r, oauthConfig.AuthCodeURL(
-		state,
-		oidc.Nonce(nonce),
-		oauth2.SetAuthURLParam("code_challenge", challenge),
-		oauth2.SetAuthURLParam("code_challenge_method", "S256"),
-	), http.StatusSeeOther)
+	authURL, err := provider.authCodeURL(s.oidc.config, state, nonce, challenge)
+	if err != nil {
+		http.Error(w, "LinuxMice sign-in is temporarily unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	http.Redirect(w, r, authURL, http.StatusSeeOther)
 }
 
 func (s *Server) handleOIDCCallback(w http.ResponseWriter, r *http.Request) {
@@ -215,34 +213,27 @@ func (s *Server) handleOIDCCallback(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "LinuxMice sign-in expired or failed browser verification", http.StatusBadRequest)
 		return
 	}
-	provider, oauthConfig, err := s.oidc.client(r.Context())
+	provider, err := s.oidc.provider(r.Context())
 	if err != nil {
 		http.Error(w, "LinuxMice sign-in is temporarily unavailable", http.StatusServiceUnavailable)
 		return
 	}
-	token, err := oauthConfig.Exchange(
-		r.Context(), code, oauth2.SetAuthURLParam("code_verifier", flow.verifier),
-	)
+	token, err := provider.exchangeCode(r.Context(), s.oidc.config, code, flow.verifier)
 	if err != nil {
 		http.Error(w, "LinuxMice sign-in failed", http.StatusBadGateway)
 		return
 	}
-	rawIDToken, ok := token.Extra("id_token").(string)
-	if !ok {
+	rawIDToken := token.IDToken
+	if rawIDToken == "" {
 		http.Error(w, "LinuxMice returned no identity", http.StatusBadGateway)
 		return
 	}
-	idToken, err := provider.Verifier(&oidc.Config{ClientID: s.oidc.config.ClientID}).Verify(r.Context(), rawIDToken)
+	claims, err := provider.verifyIDToken(rawIDToken, s.oidc.config.ClientID)
 	if err != nil {
 		http.Error(w, "LinuxMice identity verification failed", http.StatusUnauthorized)
 		return
 	}
-	var claims struct {
-		Subject string `json:"sub"`
-		Nonce   string `json:"nonce"`
-	}
-	if err := idToken.Claims(&claims); err != nil ||
-		subtle.ConstantTimeCompare([]byte(claims.Nonce), []byte(flow.nonce)) != 1 {
+	if subtle.ConstantTimeCompare([]byte(claims.Nonce), []byte(flow.nonce)) != 1 {
 		http.Error(w, "LinuxMice identity verification failed", http.StatusUnauthorized)
 		return
 	}
@@ -267,23 +258,21 @@ func (s *Server) handleOIDCCallback(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/dashboard", http.StatusSeeOther)
 }
 
-func (o *oidcRuntime) client(ctx context.Context) (*oidc.Provider, oauth2.Config, error) {
-	provider, err := oidc.NewProvider(ctx, o.config.Issuer)
+// provider fetches the OIDC discovery document. The public key set is
+// cached on the runtime so signatures can be verified across flows even
+// when discovery is refetched.
+func (o *oidcRuntime) provider(ctx context.Context) (*oidcProvider, error) {
+	provider, err := fetchOIDCDiscovery(ctx, o.config.Issuer)
 	if err != nil {
-		return nil, oauth2.Config{}, err
+		return nil, err
 	}
-	config := oauth2.Config{
-		ClientID: o.config.ClientID, ClientSecret: o.config.ClientSecret,
-		Endpoint: provider.Endpoint(), RedirectURL: o.config.RedirectURL,
-		Scopes: []string{oidc.ScopeOpenID, "profile"},
+	o.keySet.mu.Lock()
+	if o.keySet.jwksURL == "" {
+		o.keySet.jwksURL = provider.discovery.JWKSURL
 	}
-	if err := validateOIDCURL("discovered authorization endpoint", config.Endpoint.AuthURL, false); err != nil {
-		return nil, oauth2.Config{}, err
-	}
-	if err := validateOIDCURL("discovered token endpoint", config.Endpoint.TokenURL, false); err != nil {
-		return nil, oauth2.Config{}, err
-	}
-	return provider, config, nil
+	o.keySet.mu.Unlock()
+	provider.keySet = o.keySet
+	return provider, nil
 }
 
 func (o *oidcRuntime) storeFlow(state string, flow oidcPendingFlow) bool {
