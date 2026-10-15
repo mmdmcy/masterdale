@@ -505,7 +505,14 @@
       const desktopOn = d.desktop === "on";
       const sessions = d.desktop_sessions || [];
       const desktop = (desktopOn ? `${pill("on")} each Claude session gets its own desktop on first use (at most 3 at once); removed when the session ends` : `${pill("off")} ${d.desktop === "absent" ? "not set up" : "turned off"}`) +
-        sessions.map((x) => `<br>${pill(x.isolated ? "ok" : "failed")} ${esc(x.name)} · ${x.isolated ? "isolated" : "isolation check failed"} · <a href="${esc(x.url)}" target="_blank" rel="noopener">watch or take over</a>`).join("");
+        sessions.filter((x) => !x.profile).map((x) => `<br>${pill(x.isolated ? "ok" : "failed")} ${esc(x.name)} · throwaway · ${x.isolated ? "isolated" : "isolation check failed"} · <a href="${esc(x.url)}" target="_blank" rel="noopener">watch or take over</a>`).join("");
+      const profileRows = (d.desktop_profiles || []).map((p) => {
+        const live = sessions.find((x) => x.profile === p);
+        const stateText = live ? `${pill(live.isolated ? "on" : "failed")} ${live.opened_by_user ? "opened by you" : "in use by a Claude session"} · <a href="${esc(live.url)}" target="_blank" rel="noopener">watch or take over</a>` : `${pill("off")} closed; sign-ins kept`;
+        const action = live ? (live.opened_by_user ? `<button class="danger" data-desktop-profile="close" data-id="${esc(p)}" data-device="${esc(d.device)}" type="button" ${dis}>Close…</button>` : "") : `<button data-desktop-profile="open" data-id="${esc(p)}" data-device="${esc(d.device)}" type="button" ${dis}>Open…</button>`;
+        return `<tr><th>&nbsp;&nbsp;${esc(p)} desktop</th><td>${stateText}</td><td>${action}</td></tr>`;
+      }).join("");
+
       const t3 = d.t3code ? `${pill(d.t3code)}${d.t3code_url ? ` at <a href="${esc(d.t3code_url)}" target="_blank" rel="noopener">${esc(d.t3code_url)}</a>` : ""}` : "—";
       $("view").innerHTML = `<div class="panel"><p>Claude sessions that live on ${esc(d.device)} and that you open from the Code tab in the Claude app or claude.ai/code, several at once. The files and tools stay on ${esc(d.device)}.</p></div>` +
         `<div class="scroll"><table><tbody>` +
@@ -513,6 +520,7 @@
         `<tr><th>Remote Control</th><td>${server}</td><td>${running ? button("agents-stop", "Stop…", "danger") : button("agents-start", "Start…")}</td></tr>` +
         `<tr><th>Agent browser</th><td>${browser}</td><td>${d.browser ? button("agents-browser-off", "Turn off…", "danger") : button("agents-browser-on", "Turn on…")}</td></tr>` +
         `<tr><th>Agent desktop</th><td>${desktop}<br><span class="muted">Sandboxed Debian + XFCE + Firefox desktops for computer use; they reach the internet, not your network, and not each other. Viewer password: ~/.config/linuxmice/agent-desktop/vnc-password on ${esc(d.device)}.</span></td><td>${desktopOn ? button("agents-desktop-off", "Turn off…", "danger") : button("agents-desktop-on", "Turn on…")}</td></tr>` +
+        profileRows +
         `<tr><th>T3 Code</th><td>${t3}</td><td></td></tr>` +
         `</tbody></table></div>` +
         (d.next?.length ? `<div class="panel"><p><b>Next</b></p><ul>${d.next.map((step) => `<li>${esc(step)}</li>`).join("")}</ul></div>` : "");
@@ -766,6 +774,25 @@
       }
       const setupButton = event.target.closest("button[data-setup]");
       if (setupButton) { runSetupJob(setupButton.dataset.setup); return; }
+      const desktopProfile = event.target.closest("button[data-desktop-profile]");
+      if (desktopProfile) {
+        const { desktopProfile: action, id, device } = desktopProfile.dataset;
+        const note = action === "open"
+          ? `Starts your ${id} desktop so you can sign in to sites there or work alongside an agent; Claude sessions that pick ${id} join it. It stays open until you close it.`
+          : `Closes your ${id} desktop. Its sign-ins and files are kept for next time.`;
+        askConfirm(`lmice agents desktop ${action} ${id} --device ${device} --yes --format json`, note, async () => {
+          $("meta").textContent = `${action === "open" ? "opening" : "closing"} the ${id} desktop…`;
+          try {
+            const job = await startJob({ kind: `agents-desktop-${action}`, id, device });
+            const out = job.view?.data?.output || "";
+            const url = (out.match(/url=(\S+)/) || [])[1];
+            if (url) window.open(url, "_blank", "noopener");
+            if (job.view?.data && job.view.data.success === false) $("meta").textContent = `failed: ${out}`;
+          } catch (error) { $("meta").textContent = `failed: ${error.message}`; return; }
+          load(true);
+        });
+        return;
+      }
       const release = event.target.closest("button[data-release]");
       if (release) {
         const { release: action, id, device } = release.dataset;

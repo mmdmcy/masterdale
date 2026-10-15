@@ -82,6 +82,7 @@ type LinuxMiceJobRequest struct {
 	// plan-sync, plan-switch, plan-retire, plan-carry, execute-sync,
 	// execute-switch, execute-carry, execute-upkeep, tool-update,
 	// agents-start, agents-stop, agents-browser-on, agents-browser-off,
+	// agents-desktop-open, agents-desktop-close (ID is the profile),
 	// projects-tidy, tool-publish, tool-install, setup-check, setup-save,
 	// setup-apply, integration-enable or integration-disable.
 	Kind   string `json:"kind"`
@@ -296,6 +297,12 @@ func linuxmiceJobArgs(req LinuxMiceJobRequest) ([]string, bool, error) {
 		}[req.Kind]
 		args := append([]string{"agents"}, action...)
 		return append(args, "--device", req.Device, "--yes", "--format", "json"), true, nil
+	case "agents-desktop-open", "agents-desktop-close":
+		if !linuxmiceIDPattern.MatchString(req.ID) || !linuxmiceDevicePattern.MatchString(req.Device) {
+			return nil, false, errors.New("pick a profile and a device")
+		}
+		action := strings.TrimPrefix(req.Kind, "agents-desktop-")
+		return []string{"agents", "desktop", action, req.ID, "--device", req.Device, "--yes", "--format", "json"}, true, nil
 	case "tool-publish":
 		if !linuxmiceIDPattern.MatchString(req.ID) {
 			return nil, false, errors.New("pick a tool")
