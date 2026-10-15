@@ -193,6 +193,8 @@ func TestLinuxMiceAgentJobsMapToWords(t *testing.T) {
 		"agents-stop":        "agents stop --device lawnmower --yes --format json",
 		"agents-browser-on":  "agents browser on --device lawnmower --yes --format json",
 		"agents-browser-off": "agents browser off --device lawnmower --yes --format json",
+		"agents-desktop-on":  "agents desktop on --device lawnmower --yes --format json",
+		"agents-desktop-off": "agents desktop off --device lawnmower --yes --format json",
 		"projects-tidy":      "projects tidy --yes --format json",
 	} {
 		args, changes, err := linuxmiceJobArgs(LinuxMiceJobRequest{Kind: kind, Device: "lawnmower"})

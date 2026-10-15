@@ -502,12 +502,17 @@
         ? `${pill("active")} in ${esc(d.server_dir || "?")}${d.sessions ? `, ${esc(d.sessions)} sessions in use` : ""}`
         : d.server === "absent" ? `${pill("off")} not set up` : pill(d.server);
       const browser = d.browser ? `${pill("on")} each session gets its own private headless browser${d.browser_installed ? "" : " (browser not downloaded yet)"}` : pill("off");
+      const desktopOn = d.desktop === "running";
+      const desktop = desktopOn
+        ? `${pill(d.desktop_firewall ? "on" : "warning")} ${d.desktop_firewall ? "isolated from your network" : "firewall missing; turn it on again"}${d.desktop_url ? ` · <a href="${esc(d.desktop_url)}" target="_blank" rel="noopener">watch or take over</a>` : ""}`
+        : `${pill("off")} ${d.desktop === "absent" ? "not set up" : "stopped"}`;
       const t3 = d.t3code ? `${pill(d.t3code)}${d.t3code_url ? ` at <a href="${esc(d.t3code_url)}" target="_blank" rel="noopener">${esc(d.t3code_url)}</a>` : ""}` : "—";
       $("view").innerHTML = `<div class="panel"><p>Claude sessions that live on ${esc(d.device)} and that you open from the Code tab in the Claude app or claude.ai/code, several at once. The files and tools stay on ${esc(d.device)}.</p></div>` +
         `<div class="scroll"><table><tbody>` +
         `<tr><th>Claude Code</th><td>${claude}</td><td></td></tr>` +
         `<tr><th>Remote Control</th><td>${server}</td><td>${running ? button("agents-stop", "Stop…", "danger") : button("agents-start", "Start…")}</td></tr>` +
         `<tr><th>Agent browser</th><td>${browser}</td><td>${d.browser ? button("agents-browser-off", "Turn off…", "danger") : button("agents-browser-on", "Turn on…")}</td></tr>` +
+        `<tr><th>Agent desktop</th><td>${desktop}<br><span class="muted">A sandboxed Debian + XFCE + Firefox desktop for computer use; reaches the internet, not your network. Viewer password: ~/.config/linuxmice/agent-desktop/vnc-password on ${esc(d.device)}.</span></td><td>${desktopOn ? button("agents-desktop-off", "Turn off…", "danger") : button("agents-desktop-on", "Turn on…")}</td></tr>` +
         `<tr><th>T3 Code</th><td>${t3}</td><td></td></tr>` +
         `</tbody></table></div>` +
         (d.next?.length ? `<div class="panel"><p><b>Next</b></p><ul>${d.next.map((step) => `<li>${esc(step)}</li>`).join("")}</ul></div>` : "");
@@ -740,12 +745,14 @@
       const agents = event.target.closest("button[data-agents]");
       if (agents) {
         const { agents: kind, device } = agents.dataset;
-        const words = { "agents-start": "start", "agents-stop": "stop", "agents-browser-on": "browser on", "agents-browser-off": "browser off" }[kind];
+        const words = { "agents-start": "start", "agents-stop": "stop", "agents-browser-on": "browser on", "agents-browser-off": "browser off", "agents-desktop-on": "desktop on", "agents-desktop-off": "desktop off" }[kind];
         const notes = {
           "agents-start": "Keeps Claude Code Remote Control running as a user service; sessions you open from the Claude app or claude.ai/code run there.",
           "agents-stop": "Stops the Remote Control service; open sessions end.",
           "agents-browser-on": "Registers a private headless browser for every new Claude session (downloads a browser, about 400 MB on disk, once).",
           "agents-browser-off": "New Claude sessions start without the agent browser.",
+          "agents-desktop-on": "Starts the sandboxed agent desktop (the first time builds a 1.4 GB image), checks it can't reach your network and registers the desktop tools with Claude Code. At most 2 GB of memory and 2 CPUs.",
+          "agents-desktop-off": "Stops the agent desktop and removes its tools from Claude Code; its own files stay in a Docker volume.",
         };
         askConfirm(`lmice agents ${words} --device ${device} --yes --format json`, notes[kind], async () => {
           $("meta").textContent = `agents ${words} on ${device}…`;
