@@ -46,6 +46,27 @@
       }
     }
 
+    /* Night: forced dark and dimmer, whatever the system setting. */
+    :root[data-mode="night"] {
+      color-scheme: dark;
+      --bg: #0b0b0c;
+      --surface: #111213;
+      --surface-2: #17181a;
+      --sidebar: #0f1012;
+      --sidebar-active: #1a1c20;
+      --line: #24272c;
+      --text: #c8ccd1;
+      --muted: #8a919a;
+      --soft: #6b727b;
+      --accent: #5f8fd9;
+      --accent-soft: #132036;
+      --ok: #5fb27d;
+      --warn: #c2a24f;
+      --bad: #d9776f;
+      --shadow: none;
+    }
+    .mode-toggle { font: inherit; font-size: 12px; padding: 4px 10px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); color: var(--text); cursor: pointer; }
+
     * { box-sizing: border-box; }
     html { height: 100%; }
     body {
@@ -629,6 +650,30 @@
       }
     }
   </style>
+  <script>
+    // Display mode: auto (night 21:00-07:00), night (dim, no glow or
+    // blinking) or normal. Kept per browser; set before first paint.
+    (() => {
+      const key = "dale-mode", root = document.documentElement;
+      const read = () => { try { return localStorage.getItem(key) || "auto"; } catch { return "auto"; } };
+      const apply = () => {
+        const setting = read(), hour = new Date().getHours();
+        root.dataset.mode = setting === "auto" ? (hour >= 21 || hour < 7 ? "night" : "normal") : setting;
+        const button = document.getElementById("modeToggle");
+        if (button) button.textContent = { auto: "◐ Auto", night: "☾ Night", normal: "☀ Normal" }[setting] || "◐ Auto";
+      };
+      apply();
+      setInterval(apply, 10 * 60 * 1000);
+      document.addEventListener("DOMContentLoaded", () => {
+        apply();
+        document.getElementById("modeToggle")?.addEventListener("click", () => {
+          const next = { auto: "night", night: "normal", normal: "auto" }[read()] || "auto";
+          try { localStorage.setItem(key, next); } catch {}
+          apply();
+        });
+      });
+    })();
+  </script>
 </head>
 <body>
   <div class="app">
@@ -686,6 +731,7 @@
         </div>
         <div class="top-actions">
           <span class="live-status" id="liveStatus">Live</span>
+          <button id="modeToggle" class="mode-toggle" type="button" title="Display mode: auto (night after 21:00), night, normal">◐ Auto</button>
         </div>
       </header>
 

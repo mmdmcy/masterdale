@@ -107,12 +107,59 @@
     dialog { box-shadow: 0 0 0 1px var(--accent), 0 0 40px rgba(255, 122, 0, .18); }
     dialog .head { background: #000; border-bottom: 2px solid var(--accent); font-family: var(--readout); letter-spacing: .08em; }
     ::selection { background: var(--accent); color: #000; }
+
+    /* Night: dimmer colors, no glow, blinking or background pattern. */
+    :root[data-mode="night"] {
+      --bg: #020201;
+      --surface: #070605;
+      --surface-2: #0d0a06;
+      --line: #2c1f0e;
+      --text: #bfae93;
+      --muted: #7f6c51;
+      --accent: #b45500;
+      --ok: #2e9e55;
+      --warn: #a87400;
+      --bad: #b82424;
+      --hazard: repeating-linear-gradient(-45deg, #6e4c00 0 8px, #020201 8px 16px);
+    }
+    [data-mode="night"] body { background-image: none; }
+    [data-mode="night"] header h1 { color: #cfc3ae; }
+    [data-mode="night"] header::after { opacity: .45; }
+    [data-mode="night"] .pill.ok { text-shadow: none; }
+    [data-mode="night"] .pill.bad { animation: none; }
+    [data-mode="night"] dialog { box-shadow: 0 0 0 1px var(--accent); }
+    [data-mode="night"] .tabs button.active { color: #000; }
+    .mode-toggle { font-family: var(--readout); font-size: 11px; letter-spacing: .08em; }
   </style>
+  <script>
+    // Display mode: auto (night 21:00-07:00), night (dim, no glow or
+    // blinking) or normal. Kept per browser; set before first paint.
+    (() => {
+      const key = "dale-mode", root = document.documentElement;
+      const read = () => { try { return localStorage.getItem(key) || "auto"; } catch { return "auto"; } };
+      const apply = () => {
+        const setting = read(), hour = new Date().getHours();
+        root.dataset.mode = setting === "auto" ? (hour >= 21 || hour < 7 ? "night" : "normal") : setting;
+        const button = document.getElementById("modeToggle");
+        if (button) button.textContent = { auto: "◐ Auto", night: "☾ Night", normal: "☀ Normal" }[setting] || "◐ Auto";
+      };
+      apply();
+      setInterval(apply, 10 * 60 * 1000);
+      document.addEventListener("DOMContentLoaded", () => {
+        apply();
+        document.getElementById("modeToggle")?.addEventListener("click", () => {
+          const next = { auto: "night", night: "normal", normal: "auto" }[read()] || "auto";
+          try { localStorage.setItem(key, next); } catch {}
+          apply();
+        });
+      });
+    })();
+  </script>
 </head>
 <body>
   <header>
     <h1>LinuxMice Fleet<small>MAGI SYSTEM · ALL DEVICES</small></h1>
-    <span class="muted">Every view is one <code>lmice</code> command, shown above it · <a href="/dashboard">Dashboard</a></span>
+    <span class="muted">Every view is one <code>lmice</code> command, shown above it · <a href="/dashboard">Dashboard</a> · <button id="modeToggle" class="mode-toggle" type="button" title="Display mode: auto (night after 21:00), night, normal">◐ Auto</button></span>
   </header>
   <main>
     <div class="tabs" id="tabs">
