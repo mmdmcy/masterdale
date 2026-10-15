@@ -564,7 +564,7 @@
       }
       const c = d.counts;
       html += `<div class="cards"><div class="card"><strong>${esc(d.device)} ${pill(c.failed ? "failed" : c.missing || c.unavailable ? "attention" : "same")}</strong><span>${esc(d.detail)}</span></div><div class="card"><strong>Setup file</strong><span class="mono">${esc(d.setup_path)} (${esc(d.source_system)} → ${esc(d.system)}${d.omarchy ? ", Omarchy" : ""})</span></div><div class="card"><strong>Counts</strong><span>${c.ok} ok · ${c.missing} missing · ${c.review || 0} to confirm · ${c.unavailable} unavailable · ${c.skipped} skipped${d.executed ? ` · ${c.added} added · ${c.failed} failed` : ""}</span></div></div>`;
-      const labels = { package: "Packages", flatpak: "Flatpaks", repo: "Repositories", tool: "Tools", file: "Files" };
+      const labels = { package: "Packages", language: "Languages", flatpak: "Flatpaks", repo: "Repositories", tool: "Tools", file: "Files" };
       for (const [kind, label] of Object.entries(labels)) {
         const items = d.items.filter((i) => i.kind === kind);
         if (!items.length) continue;
