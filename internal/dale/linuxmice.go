@@ -55,6 +55,8 @@ var linuxmiceViews = map[string][]string{
 	"projects":     {"projects", "--format", "json"},
 	"space":        {"space", "--fleet", "--format", "json"},
 	"backups":      {"backups", "--format", "json"},
+	"org":          {"org", "--format", "json"},
+	"changes":      {"changes", "--format", "json"},
 	"attention":    {"attention", "--format", "json"},
 	// Not served as a view: names this node for the page.
 	"integrations-local": {"integrations", "--format", "json"},
@@ -89,6 +91,7 @@ type LinuxMiceJobRequest struct {
 	// agents-start, agents-stop, agents-browser-on, agents-browser-off,
 	// agents-desktop-open, agents-desktop-close (ID is the profile), backups-pull,
 	// server-update, server-reboot (ID is the server),
+	// org-fix (ID is the policy, Device the device),
 	// projects-tidy, tool-publish, tool-install, setup-check, setup-save,
 	// setup-apply, integration-enable or integration-disable.
 	Kind   string `json:"kind"`
@@ -376,6 +379,14 @@ func linuxmiceJobArgs(req LinuxMiceJobRequest) ([]string, bool, error) {
 		return []string{"servers", strings.TrimPrefix(req.Kind, "server-"), req.ID, "--yes", "--format", "json"}, true, nil
 	case "backups-pull":
 		return []string{"backups", "pull", "--yes", "--format", "json"}, true, nil
+	case "org-fix":
+		if req.ID != "screen-lock" && req.ID != "security-updates" {
+			return nil, false, errors.New("only a screen lock or automatic security updates are fixed from here")
+		}
+		if !linuxmiceIDPattern.MatchString(req.Device) {
+			return nil, false, errors.New("pick a device")
+		}
+		return []string{"org", "fix", req.Device, req.ID, "--yes", "--format", "json"}, true, nil
 	case "tool-publish":
 		if !linuxmiceIDPattern.MatchString(req.ID) {
 			return nil, false, errors.New("pick a tool")
@@ -484,6 +495,8 @@ func runLinuxMiceWith(ctx context.Context, binary, name string, args []string, t
 	defer cancel()
 	start := time.Now()
 	cmd := exec.CommandContext(cctx, binary, args...)
+	// lmice's change log records who started a change.
+	cmd.Env = append(os.Environ(), "LMICE_VIA=masterdale")
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr

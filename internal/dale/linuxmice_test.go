@@ -279,3 +279,13 @@ func waitForJob(t *testing.T, server *Server, id string) {
 		time.Sleep(20 * time.Millisecond)
 	}
 }
+
+func TestLinuxMiceOrgFixJob(t *testing.T) {
+	args, changes, err := linuxmiceJobArgs(LinuxMiceJobRequest{Kind: "org-fix", ID: "screen-lock", Device: "mini"})
+	if err != nil || !changes || strings.Join(args, " ") != "org fix mini screen-lock --yes --format json" {
+		t.Fatalf("got %q changes=%v err=%v", args, changes, err)
+	}
+	if _, _, err := linuxmiceJobArgs(LinuxMiceJobRequest{Kind: "org-fix", ID: "firewall", Device: "mini"}); err == nil {
+		t.Fatal("a firewall change was accepted from the page")
+	}
+}
