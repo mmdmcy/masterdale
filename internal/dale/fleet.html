@@ -686,7 +686,7 @@
       const lock = data.tailnet_lock == null ? "unknown" : data.tailnet_lock ? `${pill("ok")} on` : `${pill("warn")} off`;
       $("cards").innerHTML = `<div class="card"><strong>${esc(data.name)} ${pill(data.status === "ok" ? "ok" : "warn")}</strong><span>${esc(data.kind)} · ${esc(data.detail)}</span></div>` +
         `<div class="card"><strong>People</strong><span>${data.people.map((p) => `${esc(p.name)} (${esc(p.role)})`).join(", ")}</span></div>` +
-        `<div class="card"><strong>Tailnet Lock</strong><span>${lock}</span></div>`;
+        `<div class="card"><strong>Tailnet Lock</strong><span>${lock}${data.tailnet_lock === false ? " · <code>tailscale lock init</code> from a trusted device (recovery.md)" : ""}</span></div>`;
       const policies = data.policies.filter((p) => p !== "tailnet-lock");
       const rows = data.devices.map((d) => {
         const cells = policies.map((p) => {
@@ -697,7 +697,7 @@
         }).join("");
         return `<tr><td><b>${esc(d.name)}</b><br><span class="muted">${esc(d.purpose || "")}${d.person ? ` · ${esc(d.person)}` : ""}</span></td>${cells}<td class="detail">${esc(d.detail)}</td></tr>`;
       }).join("");
-      const notes = data.devices.flatMap((d) => d.checks.filter((c) => c.state === "excepted" || c.state === "fail").map((c) => `<tr><td>${esc(d.name)}</td><td>${pill(mark[c.state])} ${esc(c.policy)}</td><td class="detail">${esc(c.detail)}${c.fix ? `<br><code>${esc(c.fix)}</code>` : ""}</td></tr>`)).join("");
+      const notes = data.devices.flatMap((d) => d.checks.filter((c) => c.policy !== "tailnet-lock" && (c.state === "excepted" || c.state === "fail")).map((c) => `<tr><td>${esc(d.name)}</td><td>${pill(mark[c.state])} ${esc(c.policy)}</td><td class="detail">${esc(c.detail)}${c.fix ? `<br><code>${esc(c.fix)}</code>` : ""}</td></tr>`)).join("");
       const changes = state.views.changes?.data;
       if (!state.views.changes) api("/v1/linuxmice/changes").then((v) => { state.views.changes = v; if (state.tab === "org") render(); }).catch(() => {});
       const when = (t) => new Date(t * 1000).toLocaleString();
