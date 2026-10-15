@@ -174,6 +174,7 @@
       <button data-tab="projects" type="button">Projects</button>
       <button data-tab="integrations" type="button">Integrations</button>
       <button data-tab="selfhost" type="button">Self-hosting</button>
+      <button data-tab="backups" type="button">Backups</button>
       <button data-tab="rescue" type="button">Health</button>
     </div>
     <div class="toolbar" id="toolbar">
@@ -297,7 +298,7 @@
         $("view").innerHTML = `<div class="empty">${esc(view?.error || view?.hint || "No data")}</div>`;
         return;
       }
-      ({ repos: renderRepos, folders: renderFolders, devices: renderDevices, move: renderMove, upkeep: renderUpkeep, agents: renderAgents, projects: renderProjects, tools: renderTools, setup: renderSetup, integrations: renderIntegrations, selfhost: renderSelfhost, rescue: renderRescue })[state.tab](view.data);
+      ({ repos: renderRepos, folders: renderFolders, devices: renderDevices, move: renderMove, upkeep: renderUpkeep, agents: renderAgents, projects: renderProjects, tools: renderTools, setup: renderSetup, integrations: renderIntegrations, selfhost: renderSelfhost, backups: renderBackups, rescue: renderRescue })[state.tab](view.data);
     }
 
     function deviceCards(data) {
@@ -507,10 +508,13 @@
       const desktop = (desktopOn ? `${pill("on")} each Claude session gets its own desktop on first use (at most 3 at once); removed when the session ends` : `${pill("off")} ${d.desktop === "absent" ? "not set up" : "turned off"}`) +
         sessions.filter((x) => !x.profile).map((x) => `<br>${pill(x.isolated ? "ok" : "failed")} ${esc(x.name)} · throwaway · ${x.isolated ? "isolated" : "isolation check failed"} · <a href="${esc(x.url)}" target="_blank" rel="noopener">watch or take over</a>`).join("");
       const profileRows = (d.desktop_profiles || []).map((p) => {
-        const live = sessions.find((x) => x.profile === p);
-        const stateText = live ? `${pill(live.isolated ? "on" : "failed")} ${live.opened_by_user ? "opened by you" : "in use by a Claude session"} · <a href="${esc(live.url)}" target="_blank" rel="noopener">watch or take over</a>` : `${pill("off")} closed; sign-ins kept`;
-        const action = live ? (live.opened_by_user ? `<button class="danger" data-desktop-profile="close" data-id="${esc(p)}" data-device="${esc(d.device)}" type="button" ${dis}>Close…</button>` : "") : `<button data-desktop-profile="open" data-id="${esc(p)}" data-device="${esc(d.device)}" type="button" ${dis}>Open…</button>`;
-        return `<tr><th>&nbsp;&nbsp;${esc(p)} desktop</th><td>${stateText}</td><td>${action}</td></tr>`;
+        const mine = sessions.find((x) => x.profile === p && x.opened_by_user);
+        const agents = sessions.filter((x) => x.profile === p && !x.opened_by_user);
+        const parts = [];
+        parts.push(mine ? `${pill(mine.isolated ? "on" : "failed")} open for you · <a href="${esc(mine.url)}" target="_blank" rel="noopener">watch or sign in</a>` : `${pill("off")} closed; sign-ins kept`);
+        agents.forEach((x, i) => parts.push(`${pill(x.isolated ? "ok" : "failed")} Claude session ${i + 1} on its own copy · <a href="${esc(x.url)}" target="_blank" rel="noopener">watch</a>`));
+        const action = mine ? `<button class="danger" data-desktop-profile="close" data-id="${esc(p)}" data-device="${esc(d.device)}" type="button" ${dis}>Close…</button>` : `<button data-desktop-profile="open" data-id="${esc(p)}" data-device="${esc(d.device)}" type="button" ${dis}>Open…</button>`;
+        return `<tr><th>&nbsp;&nbsp;${esc(p)} desktop</th><td>${parts.join("<br>")}</td><td>${action}</td></tr>`;
       }).join("");
 
       const t3 = d.t3code ? `${pill(d.t3code)}${d.t3code_url ? ` at <a href="${esc(d.t3code_url)}" target="_blank" rel="noopener">${esc(d.t3code_url)}</a>` : ""}` : "—";
@@ -632,6 +636,15 @@
         `<p class="muted">Plugroot owns these services; manage them with <code>plugroot</code> on the device.</p>`;
     }
 
+    function renderBackups(data) {
+      const canChange = state.caps?.actions_enabled;
+      const mb = (n) => `${(n / 1048576).toFixed(1)} MB`;
+      const age = (s) => s == null ? "none yet" : s < 172800 ? `${Math.floor(s / 3600)}h old` : `${Math.floor(s / 86400)} days old`;
+      $("cards").innerHTML = `<div class="card"><strong>${esc(data.device)} ${pill(data.status)}</strong><span>${esc(data.detail)}</span></div>`;
+      $("view").innerHTML = (data.pulls.length ? `<div class="scroll"><table><thead><tr><th>Backup</th><th>State</th><th>Copies</th><th>Newest</th><th>From → into</th><th>Keeps</th></tr></thead><tbody>${data.pulls.map((p) => `<tr><td>${esc(p.name)}</td><td>${pill(p.state === "pulled" ? "ok" : p.state === "stale" ? "warn" : p.state === "empty" ? "warn" : p.state)}</td><td>${p.copies} · ${mb(p.bytes)}</td><td class="detail">${esc(p.newest || "-")}<br><span class="muted">${age(p.newest_age_seconds)}</span></td><td class="detail">${esc(p.from)} → ${esc(p.to)}</td><td class="detail">${esc(p.retention)}${p.detail ? `<br>${esc(p.detail)}` : ""}</td></tr>`).join("")}</tbody></table></div>` : `<div class="empty">No backup pulls set up on this node.</div>`) +
+        `<div class="panel"><p>Backups that live on another machine (the kapotteke VPS), pulled here with a key that can only read their backup folder. Only the copies the retention keeps are fetched, each is checked against its checksum, and older ones are removed, so this stays small. ${data.scheduled ? "Pulled daily around 08:30." : "Not scheduled yet (<code>lmice backups schedule on</code>)."}</p><button data-backups-pull type="button" ${canChange ? "" : "disabled"}>Pull now…</button></div>`;
+    }
+
     function renderRescue(data) {
       $("cards").innerHTML = `<div class="card"><strong>${esc(state.caps?.device || "this node")} ${pill(data.summary.state)}</strong><span>${data.summary.ok} ok · ${data.summary.warnings} warnings · ${data.summary.critical} critical · ${data.summary.unknown} unknown</span></div>`;
       const group = (title, checks) => `<h3>${esc(title)}</h3><div class="scroll"><table><tbody>${checks.map((c) => `<tr><td>${pill(c.state)}</td><td>${esc(c.label)}</td><td class="detail">${esc(c.detail)}</td></tr>`).join("")}</tbody></table></div>`;
@@ -738,6 +751,17 @@
         });
         return;
       }
+      if (event.target.closest("button[data-backups-pull]")) {
+        askConfirm("lmice backups pull --yes --format json", "Fetches missing backup copies the retention keeps, checks their checksums, and removes copies outside the retention.", async () => {
+          $("meta").textContent = "pulling backups…";
+          try {
+            const job = await startJob({ kind: "backups-pull" });
+            if (job.view?.data) state.views.backups = job.view;
+          } catch (error) { $("meta").textContent = `failed: ${error.message}`; return; }
+          render();
+        });
+        return;
+      }
       if (event.target.closest("button[data-projects]")) {
         askConfirm("lmice projects tidy --yes --format json", "Turns off the services of retired projects and moves their binaries into ~/.local/share/linuxmice/retired/ on each device. Nothing is deleted.", async () => {
           $("meta").textContent = "tidying retired projects…";
@@ -778,7 +802,7 @@
       if (desktopProfile) {
         const { desktopProfile: action, id, device } = desktopProfile.dataset;
         const note = action === "open"
-          ? `Starts your ${id} desktop so you can sign in to sites there or work alongside an agent; Claude sessions that pick ${id} join it. It stays open until you close it.`
+          ? `Starts your ${id} desktop so you can sign in to sites there; every Claude session that picks ${id} starts from a copy of these sign-ins. It stays open until you close it.`
           : `Closes your ${id} desktop. Its sign-ins and files are kept for next time.`;
         askConfirm(`lmice agents desktop ${action} ${id} --device ${device} --yes --format json`, note, async () => {
           $("meta").textContent = `${action === "open" ? "opening" : "closing"} the ${id} desktop…`;

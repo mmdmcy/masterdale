@@ -54,6 +54,7 @@ var linuxmiceViews = map[string][]string{
 	"agents":       {"agents", "--format", "json"},
 	"projects":     {"projects", "--format", "json"},
 	"space":        {"space", "--fleet", "--format", "json"},
+	"backups":      {"backups", "--format", "json"},
 	// Not served as a view: names this node for the page.
 	"integrations-local": {"integrations", "--format", "json"},
 }
@@ -82,7 +83,7 @@ type LinuxMiceJobRequest struct {
 	// plan-sync, plan-switch, plan-retire, plan-carry, execute-sync,
 	// execute-switch, execute-carry, execute-upkeep, tool-update,
 	// agents-start, agents-stop, agents-browser-on, agents-browser-off,
-	// agents-desktop-open, agents-desktop-close (ID is the profile),
+	// agents-desktop-open, agents-desktop-close (ID is the profile), backups-pull,
 	// projects-tidy, tool-publish, tool-install, setup-check, setup-save,
 	// setup-apply, integration-enable or integration-disable.
 	Kind   string `json:"kind"`
@@ -303,6 +304,8 @@ func linuxmiceJobArgs(req LinuxMiceJobRequest) ([]string, bool, error) {
 		}
 		action := strings.TrimPrefix(req.Kind, "agents-desktop-")
 		return []string{"agents", "desktop", action, req.ID, "--device", req.Device, "--yes", "--format", "json"}, true, nil
+	case "backups-pull":
+		return []string{"backups", "pull", "--yes", "--format", "json"}, true, nil
 	case "tool-publish":
 		if !linuxmiceIDPattern.MatchString(req.ID) {
 			return nil, false, errors.New("pick a tool")

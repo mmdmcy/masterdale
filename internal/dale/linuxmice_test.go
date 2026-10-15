@@ -229,6 +229,13 @@ func TestLinuxMiceDesktopProfileJobsMapToWords(t *testing.T) {
 	}
 }
 
+func TestLinuxMiceBackupsPullJob(t *testing.T) {
+	args, changes, err := linuxmiceJobArgs(LinuxMiceJobRequest{Kind: "backups-pull"})
+	if err != nil || !changes || strings.Join(args, " ") != "backups pull --yes --format json" {
+		t.Fatalf("got %q changes=%v err=%v", args, changes, err)
+	}
+}
+
 func TestLinuxMiceSetupJobsMapToWords(t *testing.T) {
 	for kind, want := range map[string]struct {
 		args    string
