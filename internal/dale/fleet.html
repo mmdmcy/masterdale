@@ -251,7 +251,7 @@
       if (!view) return "";
       if (!view.available) return esc(view.hint || "LinuxMice is not installed on this node");
       const when = view.generated_at ? new Date(view.generated_at).toLocaleTimeString() : "";
-      return `<code>$ ${esc(view.command)}</code> · ${esc(when)} · ${(view.duration_ms / 1000).toFixed(1)}s · exit ${view.exit_code ?? 0}`;
+      return `<code>$ ${esc(view.command)}</code> · ${esc(when)} · ${(view.duration_ms / 1000).toFixed(1)}s · exit ${view.exit_code ?? 0}${view.stale ? " · refreshing…" : ""}`;
     }
     function filterText() { return $("search").value.trim().toLowerCase(); }
     function verdictFilter(code) {
@@ -285,6 +285,11 @@
         return;
       }
       render();
+      // A cached result was shown while a fresh one is made: ask again soon.
+      if (state.views[key]?.stale) {
+        const wait = Math.min(Math.max(state.views[key].duration_ms || 2000, 1500), 30000) + 500;
+        setTimeout(() => { if (viewName() === name) { state.views[key] = null; load(false); } }, wait);
+      }
     }
 
     function render() {

@@ -56,6 +56,8 @@ func (s *Server) ListenAndServe() error {
 
 func (s *Server) ListenAndServeContext(ctx context.Context) error {
 	server := &http.Server{Addr: s.cfg.Listen, Handler: s.Handler()}
+	// The first page's views are ready before anyone asks.
+	s.linuxmice.Warm()
 	errCh := make(chan error, 1)
 	go func() {
 		errCh <- server.ListenAndServe()

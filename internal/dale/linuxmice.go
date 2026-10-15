@@ -77,6 +77,9 @@ type LinuxMiceView struct {
 	Data        json.RawMessage `json:"data,omitempty"`
 	Error       string          `json:"error,omitempty"`
 	Hint        string          `json:"hint,omitempty"`
+	// Stale marks a cached result shown while a fresh one is being made;
+	// the page asks again shortly.
+	Stale bool `json:"stale,omitempty"`
 }
 
 // LinuxMiceJobRequest asks for one plan or change.
@@ -106,9 +109,67 @@ type LinuxMiceJob struct {
 }
 
 type linuxmiceCache struct {
-	mu      sync.Mutex
-	entries map[string]linuxmiceCacheEntry
-	jobs    map[string]*LinuxMiceJob
+	mu         sync.Mutex
+	entries    map[string]linuxmiceCacheEntry
+	jobs       map[string]*LinuxMiceJob
+	refreshing map[string]bool
+}
+
+// warmViews are cheap and shown first; they are computed when dale starts so
+// the first page load doesn't wait for them.
+var warmViews = []string{"attention", "devices", "agents", "health", "tools", "backups", "projects", "integrations"}
+
+func linuxmiceTTL(name string) time.Duration {
+	if name == "map" || name == "space" || name == "upkeep" {
+		return linuxmiceMapCacheTTL
+	}
+	return linuxmiceCacheTTL
+}
+
+// getAny returns a cached view even after it expired, and whether it is
+// still fresh.
+func (c *linuxmiceCache) getAny(key string) (LinuxMiceView, bool, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	entry, ok := c.entries[key]
+	if !ok {
+		return LinuxMiceView{}, false, false
+	}
+	return entry.view, time.Now().Before(entry.expires), true
+}
+
+// refresh recomputes a view in the background, once at a time per view.
+func (c *linuxmiceCache) refresh(name, key string, args []string) {
+	c.mu.Lock()
+	if c.refreshing == nil {
+		c.refreshing = map[string]bool{}
+	}
+	if c.refreshing[key] {
+		c.mu.Unlock()
+		return
+	}
+	c.refreshing[key] = true
+	c.mu.Unlock()
+	go func() {
+		view := RunLinuxMiceView(context.Background(), name, args, linuxmiceTimeout)
+		if view.Error == "" {
+			c.put(key, view, linuxmiceTTL(name))
+		}
+		c.mu.Lock()
+		delete(c.refreshing, key)
+		c.mu.Unlock()
+	}()
+}
+
+// Warm computes the views the first page shows, in the background.
+func (c *linuxmiceCache) Warm() {
+	if LinuxMiceBinary() == "" {
+		return
+	}
+	for _, name := range warmViews {
+		args := linuxmiceViews[name]
+		c.refresh(name, strings.Join(args, "\x00"), args)
+	}
 }
 
 type linuxmiceCacheEntry struct {
@@ -182,18 +243,20 @@ func (s *Server) handleLinuxMice(w http.ResponseWriter, r *http.Request) {
 	}
 	key := strings.Join(args, "\x00")
 	if query.Get("refresh") == "" {
-		if view, ok := s.linuxmice.get(key); ok {
+		if view, fresh, ok := s.linuxmice.getAny(key); ok {
+			// Show the last result at once; an expired one is refreshed in
+			// the background and the page asks again.
+			if !fresh {
+				s.linuxmice.refresh(name, key, args)
+				view.Stale = true
+			}
 			writeJSON(w, http.StatusOK, view)
 			return
 		}
 	}
 	view := RunLinuxMiceView(r.Context(), name, args, linuxmiceTimeout)
 	if view.Error == "" {
-		ttl := linuxmiceCacheTTL
-		if name == "map" {
-			ttl = linuxmiceMapCacheTTL
-		}
-		s.linuxmice.put(key, view, ttl)
+		s.linuxmice.put(key, view, linuxmiceTTL(name))
 	}
 	writeJSON(w, http.StatusOK, view)
 }
