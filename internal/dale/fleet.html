@@ -243,7 +243,7 @@
     }
     function esc(value) { return String(value ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
     function bytes(n) { if (!n) return "0 B"; const u = ["B", "KB", "MB", "GB", "TB"]; let i = 0; while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; } return `${n.toFixed(i ? 1 : 0)} ${u[i]}`; }
-    const LEVEL = { core: "ok", alive: "ok", parked: "warn", retired: "", on: "ok", off: "", "logged in": "ok", "not logged in": "warn", same: "ok", ok: "ok", online: "ok", active: "ok", done: "ok", ready: "ok", info: "", repository: "", planned: "", dirty: "warn", behind: "warn", differs: "warn", "only-on": "warn", attention: "warn", warning: "warn", warn: "warn", "not-ready": "warn", unknown: "warn", diverged: "bad", offline: "bad", unreachable: "bad", unhealthy: "bad", error: "bad", failed: "bad", blocker: "bad", critical: "bad", "endpoint-outdated": "bad", missing: "warn", added: "ok", unavailable: "warn", skipped: "" };
+    const LEVEL = { core: "ok", alive: "ok", parked: "warn", retired: "", on: "ok", off: "", "logged in": "ok", "not logged in": "warn", same: "ok", ok: "ok", online: "ok", active: "ok", done: "ok", ready: "ok", info: "", repository: "", planned: "", dirty: "warn", behind: "warn", differs: "warn", "only-on": "warn", attention: "warn", warning: "warn", warn: "warn", "not-ready": "warn", unknown: "warn", diverged: "bad", offline: "bad", unreachable: "bad", unhealthy: "bad", error: "bad", failed: "bad", blocker: "bad", critical: "bad", "endpoint-outdated": "bad", missing: "warn", added: "ok", review: "warn", unavailable: "warn", skipped: "" };
     function pill(code) { return `<span class="pill ${LEVEL[code] ?? ""}">${esc(code)}</span>`; }
     function meta(view) {
       if (!view) return "";
@@ -558,7 +558,7 @@
         return html + `<div class="card"><strong>${esc(d.device)} ${pill(d.success ? "done" : "failed")}</strong><span>${esc(d.detail)} · ${d.packages} packages · ${d.flatpaks} flatpaks · ${d.tools} tools · ${d.repos} repositories · ${d.files} files${d.kept_edits ? " · your skip, files and rename kept" : ""}</span></div>`;
       }
       const c = d.counts;
-      html += `<div class="cards"><div class="card"><strong>${esc(d.device)} ${pill(c.failed ? "failed" : c.missing || c.unavailable ? "attention" : "same")}</strong><span>${esc(d.detail)}</span></div><div class="card"><strong>Setup file</strong><span class="mono">${esc(d.setup_path)} (${esc(d.source_system)} → ${esc(d.system)}${d.omarchy ? ", Omarchy" : ""})</span></div><div class="card"><strong>Counts</strong><span>${c.ok} ok · ${c.missing} missing · ${c.unavailable} unavailable · ${c.skipped} skipped${d.executed ? ` · ${c.added} added · ${c.failed} failed` : ""}</span></div></div>`;
+      html += `<div class="cards"><div class="card"><strong>${esc(d.device)} ${pill(c.failed ? "failed" : c.missing || c.unavailable ? "attention" : "same")}</strong><span>${esc(d.detail)}</span></div><div class="card"><strong>Setup file</strong><span class="mono">${esc(d.setup_path)} (${esc(d.source_system)} → ${esc(d.system)}${d.omarchy ? ", Omarchy" : ""})</span></div><div class="card"><strong>Counts</strong><span>${c.ok} ok · ${c.missing} missing · ${c.review || 0} to confirm · ${c.unavailable} unavailable · ${c.skipped} skipped${d.executed ? ` · ${c.added} added · ${c.failed} failed` : ""}</span></div></div>`;
       const labels = { package: "Packages", flatpak: "Flatpaks", repo: "Repositories", tool: "Tools", file: "Files" };
       for (const [kind, label] of Object.entries(labels)) {
         const items = d.items.filter((i) => i.kind === kind);
@@ -570,6 +570,7 @@
         if (open.length) html += `<div class="scroll"><table><tbody>${open.map((i) => `<tr><td class="mono name">${esc(i.name)}${kind === "package" && i.target && i.target !== i.name ? ` <span class="muted">→ ${esc(i.target)}</span>` : ""}</td><td>${pill(i.state)}</td><td class="detail">${esc(i.detail)}</td></tr>`).join("")}</tbody></table></div>`;
         if (skipped.length) html += `<details><summary class="muted">${skipped.length} skipped</summary><div class="scroll"><table><tbody>${skipped.map((i) => `<tr><td class="mono name">${esc(i.name)}</td><td class="detail">${esc(i.detail)}</td></tr>`).join("")}</tbody></table></div></details>`;
       }
+      if (c.review) html += `<div class="panel"><p><b>To confirm.</b> Apply never installs a suggested name: an equal name on another distribution is not proof of the same software, and the AUR is community-built. Add the ones you trust to <code>[rename.${esc(d.system)}]</code> in <span class="mono">${esc(d.setup_path)}</span>, or list them under <code>skip</code>.</p></div>`;
       if (d.next?.length) html += `<div class="panel"><p><b>Run by hand on ${esc(d.device)}</b></p><pre class="mono">${d.next.map(esc).join("\n")}</pre></div>`;
       if (!d.executed && c.missing && canChange) html += `<button class="danger" data-setup="setup-apply" type="button">Apply: add ${c.missing} item(s) to ${esc(d.device)}…</button>`;
       return html;
