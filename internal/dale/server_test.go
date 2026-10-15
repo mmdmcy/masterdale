@@ -155,6 +155,22 @@ func TestServerRemoteNetworkGuard(t *testing.T) {
 		t.Fatalf("expected dashboard shell to load on private network: %d %s", w.Code, w.Body.String())
 	}
 
+	req = httptest.NewRequest(http.MethodGet, "/fleet", nil)
+	req.RemoteAddr = "100.64.0.42:12345"
+	w = httptest.NewRecorder()
+	server.Handler().ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected the fleet page shell to load on private network: %d %s", w.Code, w.Body.String())
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/v1/linuxmice/devices", nil)
+	req.RemoteAddr = "100.64.0.42:12345"
+	w = httptest.NewRecorder()
+	server.Handler().ServeHTTP(w, req)
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("expected fleet data to require auth remotely: %d %s", w.Code, w.Body.String())
+	}
+
 	req = httptest.NewRequest(http.MethodGet, "/v1/dashboard", nil)
 	req.RemoteAddr = "100.64.0.42:12345"
 	w = httptest.NewRecorder()

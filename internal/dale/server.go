@@ -115,7 +115,7 @@ func isDashboardShellRequest(r *http.Request) bool {
 	if r.Method != http.MethodGet {
 		return false
 	}
-	return r.URL.Path == "/" || r.URL.Path == "/dashboard"
+	return r.URL.Path == "/" || r.URL.Path == "/dashboard" || r.URL.Path == "/fleet"
 }
 
 func remoteNetworkAllowed(r *http.Request) bool {
