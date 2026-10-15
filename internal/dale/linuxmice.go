@@ -82,8 +82,8 @@ type LinuxMiceJobRequest struct {
 	// plan-sync, plan-switch, plan-retire, plan-carry, execute-sync,
 	// execute-switch, execute-carry, execute-upkeep, tool-update,
 	// agents-start, agents-stop, agents-browser-on, agents-browser-off,
-	// projects-tidy, tool-publish, tool-install,
-	// integration-enable or integration-disable.
+	// projects-tidy, tool-publish, tool-install, setup-check, setup-save,
+	// setup-apply, integration-enable or integration-disable.
 	Kind   string `json:"kind"`
 	A      string `json:"a,omitempty"`
 	B      string `json:"b,omitempty"`
@@ -309,6 +309,30 @@ func linuxmiceJobArgs(req LinuxMiceJobRequest) ([]string, bool, error) {
 			return nil, false, errors.New("pick a tool and a device")
 		}
 		return []string{"tools", "update", req.ID, "--device", req.Device, "--yes", "--format", "json"}, true, nil
+	case "setup-check", "setup-save", "setup-apply":
+		// Device is the device to check or change; B, when set, is the device
+		// whose setup file it is compared with (--like).
+		if !linuxmiceDevicePattern.MatchString(req.Device) {
+			return nil, false, errors.New("pick a device")
+		}
+		args := []string{"setup"}
+		switch req.Kind {
+		case "setup-save":
+			args = append(args, "save")
+		case "setup-apply":
+			args = append(args, "apply")
+		}
+		args = append(args, "--device", req.Device)
+		if req.Kind != "setup-save" && req.B != "" && req.B != req.Device {
+			if !linuxmiceDevicePattern.MatchString(req.B) {
+				return nil, false, errors.New("invalid --like device")
+			}
+			args = append(args, "--like", req.B)
+		}
+		if req.Kind == "setup-check" {
+			return append(args, "--format", "json"), false, nil
+		}
+		return append(args, "--yes", "--format", "json"), true, nil
 	case "integration-enable", "integration-disable":
 		if !linuxmiceIDPattern.MatchString(req.ID) || !linuxmiceDevicePattern.MatchString(req.Device) {
 			return nil, false, errors.New("pick an integration id and a device")

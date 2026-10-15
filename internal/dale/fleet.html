@@ -170,6 +170,7 @@
       <button data-tab="upkeep" type="button">Upkeep</button>
       <button data-tab="agents" type="button">Agents</button>
       <button data-tab="tools" type="button">Tools</button>
+      <button data-tab="setup" type="button">Setup</button>
       <button data-tab="projects" type="button">Projects</button>
       <button data-tab="integrations" type="button">Integrations</button>
       <button data-tab="selfhost" type="button">Self-hosting</button>
@@ -211,7 +212,7 @@
   </dialog>
 
   <script>
-    const state = { tab: "repos", views: {}, caps: null, location: "", move: { a: "", b: "", result: null, kind: "", running: false }, selfhostDevice: "" };
+    const state = { tab: "repos", views: {}, caps: null, location: "", move: { a: "", b: "", result: null, kind: "", running: false }, selfhostDevice: "", setup: { device: "", like: "", result: null, running: "" } };
     const $ = (id) => document.getElementById(id);
 
     function authHeaders() {
@@ -242,7 +243,7 @@
     }
     function esc(value) { return String(value ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
     function bytes(n) { if (!n) return "0 B"; const u = ["B", "KB", "MB", "GB", "TB"]; let i = 0; while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; } return `${n.toFixed(i ? 1 : 0)} ${u[i]}`; }
-    const LEVEL = { core: "ok", alive: "ok", parked: "warn", retired: "", on: "ok", off: "", "logged in": "ok", "not logged in": "warn", same: "ok", ok: "ok", online: "ok", active: "ok", done: "ok", ready: "ok", info: "", repository: "", planned: "", dirty: "warn", behind: "warn", differs: "warn", "only-on": "warn", attention: "warn", warning: "warn", warn: "warn", "not-ready": "warn", unknown: "warn", diverged: "bad", offline: "bad", unreachable: "bad", unhealthy: "bad", error: "bad", failed: "bad", blocker: "bad", critical: "bad", "endpoint-outdated": "bad" };
+    const LEVEL = { core: "ok", alive: "ok", parked: "warn", retired: "", on: "ok", off: "", "logged in": "ok", "not logged in": "warn", same: "ok", ok: "ok", online: "ok", active: "ok", done: "ok", ready: "ok", info: "", repository: "", planned: "", dirty: "warn", behind: "warn", differs: "warn", "only-on": "warn", attention: "warn", warning: "warn", warn: "warn", "not-ready": "warn", unknown: "warn", diverged: "bad", offline: "bad", unreachable: "bad", unhealthy: "bad", error: "bad", failed: "bad", blocker: "bad", critical: "bad", "endpoint-outdated": "bad", missing: "warn", added: "ok", unavailable: "warn", skipped: "" };
     function pill(code) { return `<span class="pill ${LEVEL[code] ?? ""}">${esc(code)}</span>`; }
     function meta(view) {
       if (!view) return "";
@@ -261,7 +262,7 @@
       const devices = state.views.devices?.data?.devices?.map((d) => d.id) || state.views.map?.data?.devices?.map((d) => d.device) || [];
       return [...new Set(devices)];
     }
-    function viewName() { return { repos: "map", folders: "map", move: "devices" }[state.tab] || state.tab; }
+    function viewName() { return { repos: "map", folders: "map", move: "devices", setup: "devices" }[state.tab] || state.tab; }
 
     async function load(force) {
       const name = viewName();
@@ -296,7 +297,7 @@
         $("view").innerHTML = `<div class="empty">${esc(view?.error || view?.hint || "No data")}</div>`;
         return;
       }
-      ({ repos: renderRepos, folders: renderFolders, devices: renderDevices, move: renderMove, upkeep: renderUpkeep, agents: renderAgents, projects: renderProjects, tools: renderTools, integrations: renderIntegrations, selfhost: renderSelfhost, rescue: renderRescue })[state.tab](view.data);
+      ({ repos: renderRepos, folders: renderFolders, devices: renderDevices, move: renderMove, upkeep: renderUpkeep, agents: renderAgents, projects: renderProjects, tools: renderTools, setup: renderSetup, integrations: renderIntegrations, selfhost: renderSelfhost, rescue: renderRescue })[state.tab](view.data);
     }
 
     function deviceCards(data) {
@@ -530,6 +531,68 @@
       })() + `<p class="muted">Update builds from each device's own checkout in ~/Documents/github; the previous install is kept as a backup and a running tool is restarted (<code>lmice tools update NAME --device DEVICE</code>).</p>`;
     }
 
+    function renderSetup() {
+      const devices = fleetDevices();
+      const s = state.setup;
+      if (!s.device) s.device = state.caps?.device && devices.includes(state.caps.device) ? state.caps.device : devices[0] || "";
+      const canChange = state.caps?.actions_enabled;
+      const busy = s.running ? "disabled" : "";
+      const option = (d, selected, label) => `<option value="${esc(d)}" ${d === selected ? "selected" : ""}>${esc(label || d)}</option>`;
+      let html = `<div class="panel"><p>Everything that makes a device yours lives in one file on it (<code>~/.config/linuxmice/setup.toml</code>, with a copy on the release host): packages you installed, flatpaks, your tools, the checkouts in ~/Documents/github and dotfiles. <em>Apply</em> adds what a device lacks, translating package names between Mint and Arch/Omarchy; it never removes or overwrites anything.</p><div class="toolbar">
+          <label>Device <select id="setupDevice">${devices.map((d) => option(d, s.device)).join("")}</select></label>
+          <label>like <select id="setupLike">${option("", s.like, "its own setup")}${devices.filter((d) => d !== s.device).map((d) => option(d, s.like, `${d}'s setup`)).join("")}</select></label>
+          <button data-setup="setup-check" class="primary" type="button" ${busy}>Check</button>
+          <button data-setup="setup-save" type="button" ${busy} ${canChange ? "" : "disabled"}>Save ${esc(s.device)}'s setup…</button>
+        </div></div>`;
+      if (s.running) html += `<div class="empty">running <code>${esc(s.running)}</code>… (checking a device takes up to a minute; applying can take a while)</div>`;
+      else if (s.result) html += renderSetupResult(s.result, canChange);
+      $("view").innerHTML = html;
+    }
+
+    function renderSetupResult(job, canChange) {
+      const view = job.view || {};
+      let html = `<div class="meta">${meta(view)}</div>`;
+      const d = view.data;
+      if (!d) return html + `<div class="empty">${esc(view.error || view.hint || job.state)}</div>`;
+      if (d.schema_version === "linuxmice.setup.save.v1") {
+        return html + `<div class="card"><strong>${esc(d.device)} ${pill(d.success ? "done" : "failed")}</strong><span>${esc(d.detail)} · ${d.packages} packages · ${d.flatpaks} flatpaks · ${d.tools} tools · ${d.repos} repositories · ${d.files} files${d.kept_edits ? " · your skip, files and rename kept" : ""}</span></div>`;
+      }
+      const c = d.counts;
+      html += `<div class="cards"><div class="card"><strong>${esc(d.device)} ${pill(c.failed ? "failed" : c.missing || c.unavailable ? "attention" : "same")}</strong><span>${esc(d.detail)}</span></div><div class="card"><strong>Setup file</strong><span class="mono">${esc(d.setup_path)} (${esc(d.source_system)} → ${esc(d.system)}${d.omarchy ? ", Omarchy" : ""})</span></div><div class="card"><strong>Counts</strong><span>${c.ok} ok · ${c.missing} missing · ${c.unavailable} unavailable · ${c.skipped} skipped${d.executed ? ` · ${c.added} added · ${c.failed} failed` : ""}</span></div></div>`;
+      const labels = { package: "Packages", flatpak: "Flatpaks", repo: "Repositories", tool: "Tools", file: "Files" };
+      for (const [kind, label] of Object.entries(labels)) {
+        const items = d.items.filter((i) => i.kind === kind);
+        if (!items.length) continue;
+        const open = items.filter((i) => !["ok", "skipped"].includes(i.state));
+        const skipped = items.filter((i) => i.state === "skipped");
+        const ok = items.length - open.length - skipped.length;
+        html += `<h3>${esc(label)} <span class="muted">${ok} of ${items.length} in place</span></h3>`;
+        if (open.length) html += `<div class="scroll"><table><tbody>${open.map((i) => `<tr><td class="mono name">${esc(i.name)}${kind === "package" && i.target && i.target !== i.name ? ` <span class="muted">→ ${esc(i.target)}</span>` : ""}</td><td>${pill(i.state)}</td><td class="detail">${esc(i.detail)}</td></tr>`).join("")}</tbody></table></div>`;
+        if (skipped.length) html += `<details><summary class="muted">${skipped.length} skipped</summary><div class="scroll"><table><tbody>${skipped.map((i) => `<tr><td class="mono name">${esc(i.name)}</td><td class="detail">${esc(i.detail)}</td></tr>`).join("")}</tbody></table></div></details>`;
+      }
+      if (d.next?.length) html += `<div class="panel"><p><b>Run by hand on ${esc(d.device)}</b></p><pre class="mono">${d.next.map(esc).join("\n")}</pre></div>`;
+      if (!d.executed && c.missing && canChange) html += `<button class="danger" data-setup="setup-apply" type="button">Apply: add ${c.missing} item(s) to ${esc(d.device)}…</button>`;
+      return html;
+    }
+
+    async function runSetupJob(kind) {
+      const s = state.setup;
+      const like = s.like && s.like !== s.device ? ` --like ${s.like}` : "";
+      const command = { "setup-check": `lmice setup --device ${s.device}${like} --format json`, "setup-save": `lmice setup save --device ${s.device} --yes --format json`, "setup-apply": `lmice setup apply --device ${s.device}${like} --yes --format json` }[kind];
+      const run = async () => {
+        s.running = command;
+        renderSetup();
+        try { s.result = await startJob({ kind, device: s.device, b: s.like }); } catch (error) { s.result = { state: "failed", view: { error: error.message } }; }
+        s.running = "";
+        if (state.tab === "setup") renderSetup();
+      };
+      if (kind === "setup-check") { run(); return; }
+      const note = kind === "setup-save"
+        ? "Writes the setup file from what is on the device now; your skip, files and rename entries are kept and the old file stays as a backup."
+        : "Installs the missing packages, flatpaks and tools, clones missing repositories and copies missing files. Nothing is removed, upgraded or overwritten. Package installs need passwordless sudo on the device; otherwise the exact command is shown.";
+      askConfirm(command, note, run);
+    }
+
     function renderIntegrations(data) {
       const text = filterText();
       const canChange = state.caps?.actions_enabled;
@@ -693,6 +756,8 @@
         });
         return;
       }
+      const setupButton = event.target.closest("button[data-setup]");
+      if (setupButton) { runSetupJob(setupButton.dataset.setup); return; }
       const release = event.target.closest("button[data-release]");
       if (release) {
         const { release: action, id, device } = release.dataset;
@@ -734,6 +799,8 @@
     $("view").addEventListener("change", (event) => {
       if (event.target.id === "moveA") { state.move.a = event.target.value; state.move.result = null; renderMove(); }
       if (event.target.id === "moveB") { state.move.b = event.target.value; state.move.result = null; renderMove(); }
+      if (event.target.id === "setupDevice") { state.setup.device = event.target.value; if (state.setup.like === state.setup.device) state.setup.like = ""; state.setup.result = null; renderSetup(); }
+      if (event.target.id === "setupLike") { state.setup.like = event.target.value; state.setup.result = null; renderSetup(); }
     });
     function fillHostDevices() {
       const devices = fleetDevices();

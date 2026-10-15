@@ -217,6 +217,25 @@ func TestLinuxMiceReleaseJobsMapToWords(t *testing.T) {
 	}
 }
 
+func TestLinuxMiceSetupJobsMapToWords(t *testing.T) {
+	for kind, want := range map[string]struct {
+		args    string
+		changes bool
+	}{
+		"setup-check": {"setup --device nerv --like lawnmower --format json", false},
+		"setup-save":  {"setup save --device nerv --yes --format json", true},
+		"setup-apply": {"setup apply --device nerv --like lawnmower --yes --format json", true},
+	} {
+		args, changes, err := linuxmiceJobArgs(LinuxMiceJobRequest{Kind: kind, Device: "nerv", B: "lawnmower"})
+		if err != nil || changes != want.changes || strings.Join(args, " ") != want.args {
+			t.Fatalf("%s: got %q changes=%v err=%v", kind, args, changes, err)
+		}
+	}
+	if _, _, err := linuxmiceJobArgs(LinuxMiceJobRequest{Kind: "setup-apply", Device: "nerv", B: "--yes"}); err == nil {
+		t.Fatal("a flag was accepted as the --like device")
+	}
+}
+
 func waitForJob(t *testing.T, server *Server, id string) {
 	t.Helper()
 	deadline := time.Now().Add(5 * time.Second)
