@@ -202,6 +202,21 @@ func TestLinuxMiceAgentJobsMapToWords(t *testing.T) {
 	}
 }
 
+func TestLinuxMiceReleaseJobsMapToWords(t *testing.T) {
+	for kind, want := range map[string]string{
+		"tool-publish": "tools publish dale --yes --format json",
+		"tool-install": "tools install dale --device lawnmower --yes --format json",
+	} {
+		args, changes, err := linuxmiceJobArgs(LinuxMiceJobRequest{Kind: kind, ID: "dale", Device: "lawnmower"})
+		if err != nil || !changes || strings.Join(args, " ") != want {
+			t.Fatalf("%s: got %q changes=%v err=%v", kind, args, changes, err)
+		}
+	}
+	if _, _, err := linuxmiceJobArgs(LinuxMiceJobRequest{Kind: "tool-install", ID: "dale", Device: "x;rm"}); err == nil {
+		t.Fatal("a bad device name was accepted")
+	}
+}
+
 func waitForJob(t *testing.T, server *Server, id string) {
 	t.Helper()
 	deadline := time.Now().Add(5 * time.Second)

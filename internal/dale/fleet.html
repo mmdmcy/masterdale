@@ -441,11 +441,15 @@
         if (d.status !== "ok") return `<div class="card" style="margin-bottom:8px"><strong>${esc(d.device)} ${pill(d.status === "offline" ? "offline" : "error")}</strong><span>${esc(d.detail)}</span></div>`;
         const rows = d.tools.filter((t) => t.state !== "not-installed" && (!text || t.name.includes(text)));
         return `<h3>${esc(d.device)} <span class="muted">${esc(d.detail)}</span></h3><div class="scroll" style="margin-bottom:16px"><table><thead><tr><th>Tool</th><th>State</th><th>Running</th><th>Autostart</th><th>Detail</th><th></th></tr></thead><tbody>${rows.map((t) => {
-          const update = t.state === "outdated" && t.updatable ? `<button data-tool="${esc(t.name)}" data-device="${esc(d.device)}" type="button" ${canChange ? "" : "disabled"}>Update</button>` : "";
+          const update = (t.state === "outdated" && t.updatable ? `<button data-tool="${esc(t.name)}" data-device="${esc(d.device)}" type="button" ${canChange ? "" : "disabled"}>Update</button> ` : "") +
+            (t.releasable ? `<button data-release="install" data-id="${esc(t.name)}" data-device="${esc(d.device)}" type="button" ${canChange ? "" : "disabled"}>Install release</button>` : "");
           const dirty = t.uncommitted_changes ? `<br><span class="muted">${t.uncommitted_changes} uncommitted change(s) in the checkout would be built in</span>` : "";
           return `<tr><td>${esc(t.name)}</td><td>${pill(t.state === "current" ? "same" : t.state === "outdated" ? "behind" : t.state)}</td><td>${t.running ? "yes" : "—"}</td><td>${t.autostart ? "yes" : "—"}</td><td class="detail">${esc(t.updatable || t.state !== "outdated" ? t.detail : t.detail + "; deployed by Plugroot")}${dirty}</td><td>${update}</td></tr>`;
         }).join("")}</tbody></table></div>`;
-      }).join("") + `<p class="muted">Tools are built from each device's own checkout in ~/Documents/github; the previous install is kept as a backup and a running tool is restarted (<code>lmice tools update NAME --device DEVICE</code>).</p>`;
+      }).join("") + (() => {
+        const releasable = [...new Set(data.devices.flatMap((d) => (d.tools || []).filter((t) => t.releasable).map((t) => t.name)))];
+        return releasable.length ? `<div class="panel"><p><strong>Releases.</strong> Build a tool once on the release host and upload it to Forgejo; <em>Install release</em> then puts the newest one on a device in seconds, checksum-checked, with the previous version kept for rollback (<code>lmice tools publish NAME</code>, <code>lmice tools install NAME --device D [--version V]</code>).</p>${releasable.map((name) => `<button data-release="publish" data-id="${esc(name)}" type="button" ${canChange ? "" : "disabled"}>Publish ${esc(name)}</button>`).join(" ")}</div>` : "";
+      })() + `<p class="muted">Update builds from each device's own checkout in ~/Documents/github; the previous install is kept as a backup and a running tool is restarted (<code>lmice tools update NAME --device DEVICE</code>).</p>`;
     }
 
     function renderIntegrations(data) {
@@ -606,6 +610,21 @@
           try {
             const job = await startJob({ kind, device });
             if (job.view?.data && job.view.data.success === false) $("meta").textContent = `failed: ${job.view.data.output || ""}`;
+          } catch (error) { $("meta").textContent = `failed: ${error.message}`; return; }
+          load(true);
+        });
+        return;
+      }
+      const release = event.target.closest("button[data-release]");
+      if (release) {
+        const { release: action, id, device } = release.dataset;
+        const command = action === "publish" ? `lmice tools publish ${id} --yes --format json` : `lmice tools install ${id} --device ${device} --yes --format json`;
+        const note = action === "publish" ? "Builds from the release host's clean checkout for every target and uploads to Forgejo. Publishing the same commit again changes nothing." : "Downloads the newest published release, checks its checksum and switches the device to it; the previous version stays for rollback and a running tool is restarted.";
+        askConfirm(command, note, async () => {
+          $("meta").textContent = action === "publish" ? `publishing ${id}…` : `installing ${id} on ${device}…`;
+          try {
+            const job = await startJob({ kind: `tool-${action}`, id, device });
+            if (job.view?.data && job.view.data.success === false) $("meta").textContent = `failed: ${job.view.data.detail || ""}`;
           } catch (error) { $("meta").textContent = `failed: ${error.message}`; return; }
           load(true);
         });

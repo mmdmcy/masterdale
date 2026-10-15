@@ -82,7 +82,7 @@ type LinuxMiceJobRequest struct {
 	// plan-sync, plan-switch, plan-retire, plan-carry, execute-sync,
 	// execute-switch, execute-carry, execute-upkeep, tool-update,
 	// agents-start, agents-stop, agents-browser-on, agents-browser-off,
-	// projects-tidy,
+	// projects-tidy, tool-publish, tool-install,
 	// integration-enable or integration-disable.
 	Kind   string `json:"kind"`
 	A      string `json:"a,omitempty"`
@@ -294,6 +294,16 @@ func linuxmiceJobArgs(req LinuxMiceJobRequest) ([]string, bool, error) {
 		}[req.Kind]
 		args := append([]string{"agents"}, action...)
 		return append(args, "--device", req.Device, "--yes", "--format", "json"), true, nil
+	case "tool-publish":
+		if !linuxmiceIDPattern.MatchString(req.ID) {
+			return nil, false, errors.New("pick a tool")
+		}
+		return []string{"tools", "publish", req.ID, "--yes", "--format", "json"}, true, nil
+	case "tool-install":
+		if !linuxmiceIDPattern.MatchString(req.ID) || !linuxmiceDevicePattern.MatchString(req.Device) {
+			return nil, false, errors.New("pick a tool and a device")
+		}
+		return []string{"tools", "install", req.ID, "--device", req.Device, "--yes", "--format", "json"}, true, nil
 	case "tool-update":
 		if !linuxmiceIDPattern.MatchString(req.ID) || !linuxmiceDevicePattern.MatchString(req.Device) {
 			return nil, false, errors.New("pick a tool and a device")
