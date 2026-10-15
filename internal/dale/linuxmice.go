@@ -55,6 +55,7 @@ var linuxmiceViews = map[string][]string{
 	"projects":     {"projects", "--format", "json"},
 	"space":        {"space", "--fleet", "--format", "json"},
 	"backups":      {"backups", "--format", "json"},
+	"attention":    {"attention", "--format", "json"},
 	// Not served as a view: names this node for the page.
 	"integrations-local": {"integrations", "--format", "json"},
 }

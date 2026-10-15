@@ -163,7 +163,8 @@
   </header>
   <main>
     <div class="tabs" id="tabs">
-      <button data-tab="repos" class="active" type="button">Repositories</button>
+      <button data-tab="attention" class="active" type="button">Attention</button>
+      <button data-tab="repos" type="button">Repositories</button>
       <button data-tab="folders" type="button">Folders</button>
       <button data-tab="devices" type="button">Devices</button>
       <button data-tab="move" type="button">Sync &amp; move</button>
@@ -213,7 +214,7 @@
   </dialog>
 
   <script>
-    const state = { tab: "repos", views: {}, caps: null, location: "", move: { a: "", b: "", result: null, kind: "", running: false }, selfhostDevice: "", setup: { device: "", like: "", result: null, running: "" } };
+    const state = { tab: "attention", views: {}, caps: null, location: "", move: { a: "", b: "", result: null, kind: "", running: false }, selfhostDevice: "", setup: { device: "", like: "", result: null, running: "" } };
     const $ = (id) => document.getElementById(id);
 
     function authHeaders() {
@@ -298,7 +299,25 @@
         $("view").innerHTML = `<div class="empty">${esc(view?.error || view?.hint || "No data")}</div>`;
         return;
       }
-      ({ repos: renderRepos, folders: renderFolders, devices: renderDevices, move: renderMove, upkeep: renderUpkeep, agents: renderAgents, projects: renderProjects, tools: renderTools, setup: renderSetup, integrations: renderIntegrations, selfhost: renderSelfhost, backups: renderBackups, rescue: renderRescue })[state.tab](view.data);
+      ({ attention: renderAttention, repos: renderRepos, folders: renderFolders, devices: renderDevices, move: renderMove, upkeep: renderUpkeep, agents: renderAgents, projects: renderProjects, tools: renderTools, setup: renderSetup, integrations: renderIntegrations, selfhost: renderSelfhost, backups: renderBackups, rescue: renderRescue })[state.tab](view.data);
+    }
+
+    function renderAttention(data) {
+      const sev = { critical: "critical", warn: "warn", info: "" };
+      const when = (t) => new Date(t * 1000).toLocaleString();
+      const head = data.items.length
+        ? `${pill(data.status === "info" ? "ok" : data.status)} ${esc(data.detail)}`
+        : `${pill("ok")} Nothing needs you right now.`;
+      $("cards").innerHTML = `<div class="card"><strong>Attention</strong><span>${head}</span></div>` +
+        `<div class="card"><strong>Notifications</strong><span>${data.notify ? `new warnings go to <code>${esc(data.notify)}</code>` : "not set up"} · ${data.scheduled ? "checked every 30 minutes" : "not checked automatically"}</span></div>`;
+      const items = data.items.map((i) => `<tr><td>${i.severity === "info" ? `<span class="pill">later</span>` : pill(sev[i.severity] || i.severity)}</td><td><b>${esc(i.title)}</b>${i.detail ? `<br><span class="muted">${esc(i.detail)}</span>` : ""}</td><td class="mono detail">${esc(i.fix)}</td></tr>`).join("");
+      const failed = data.sources.filter((s) => s.status !== "ok");
+      const recent = (data.recent || []).map((e) => `<tr><td class="muted">${esc(when(e.at))}</td><td>${e.kind === "new" ? pill(sev[e.severity] || "info") : pill("done")} ${esc(e.kind === "new" ? "appeared" : "resolved")}</td><td>${esc(e.title)}</td></tr>`).join("");
+      $("view").innerHTML =
+        (items ? `<div class="scroll"><table><thead><tr><th></th><th>What</th><th>How to fix it</th></tr></thead><tbody>${items}</tbody></table></div>` : `<div class="empty">All clear: devices, servers, backups, deploys and agent desktops are fine.</div>`) +
+        (failed.length ? `<p class="muted">Could not check: ${failed.map((s) => `${esc(s.name)} (${esc(s.detail)})`).join("; ")}</p>` : "") +
+        `<h3>What happened</h3>` + (recent ? `<div class="scroll"><table><tbody>${recent}</tbody></table></div>` : `<p class="muted">Nothing recorded yet; the 30-minute check records what appears and what gets resolved.</p>`) +
+        `<p class="muted">Checked: ${data.sources.map((s) => `${esc(s.name)} ${s.status === "ok" ? "✓" : "✗"}`).join(" · ")}. On your phone: install the ntfy app, add the server <code>https://lawnmower.tail359cf9.ts.net:8447</code> and subscribe to <code>fleet</code> (Tailscale must be on). <code>lmice attention</code> shows the same.</p>`;
     }
 
     function deviceCards(data) {
