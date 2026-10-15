@@ -229,6 +229,16 @@ func TestLinuxMiceDesktopProfileJobsMapToWords(t *testing.T) {
 	}
 }
 
+func TestLinuxMiceServerJobs(t *testing.T) {
+	args, changes, err := linuxmiceJobArgs(LinuxMiceJobRequest{Kind: "server-reboot", ID: "kapotteke-vps"})
+	if err != nil || !changes || strings.Join(args, " ") != "servers reboot kapotteke-vps --yes --format json" {
+		t.Fatalf("got %q changes=%v err=%v", args, changes, err)
+	}
+	if _, _, err := linuxmiceJobArgs(LinuxMiceJobRequest{Kind: "server-update", ID: "x;reboot"}); err == nil {
+		t.Fatal("a bad server name was accepted")
+	}
+}
+
 func TestLinuxMiceBackupsPullJob(t *testing.T) {
 	args, changes, err := linuxmiceJobArgs(LinuxMiceJobRequest{Kind: "backups-pull"})
 	if err != nil || !changes || strings.Join(args, " ") != "backups pull --yes --format json" {

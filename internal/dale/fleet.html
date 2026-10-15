@@ -315,7 +315,12 @@
         : `${pill("ok")} Nothing needs you right now.`;
       $("cards").innerHTML = `<div class="card"><strong>Attention</strong><span>${head}</span></div>` +
         `<div class="card"><strong>Notifications</strong><span>${data.notify ? `new warnings go to <code>${esc(data.notify)}</code>` : "not set up"} · ${data.scheduled ? "checked every 30 minutes" : "not checked automatically"}</span></div>`;
-      const items = data.items.map((i) => `<tr><td>${i.severity === "info" ? `<span class="pill">later</span>` : pill(sev[i.severity] || i.severity)}</td><td><b>${esc(i.title)}</b>${i.detail ? `<br><span class="muted">${esc(i.detail)}</span>` : ""}</td><td class="mono detail">${esc(i.fix)}</td></tr>`).join("");
+      const canChange = state.caps?.actions_enabled;
+      const items = data.items.map((i) => {
+        const a = i.action;
+        const button = a ? `<br><button data-fix="${esc(a.kind)}" data-id="${esc(a.id || "")}" data-device="${esc(a.device || "")}" data-label="${esc(a.label)}" data-title="${esc(i.title)}" type="button" ${canChange ? "" : "disabled"}>${esc(a.label)}…</button>` : "";
+        return `<tr><td>${i.severity === "info" ? `<span class="pill">later</span>` : pill(sev[i.severity] || i.severity)}</td><td><b>${esc(i.title)}</b>${i.detail ? `<br><span class="muted">${esc(i.detail)}</span>` : ""}</td><td class="mono detail">${esc(i.fix)}${button}</td></tr>`;
+      }).join("");
       const failed = data.sources.filter((s) => s.status !== "ok");
       const recent = (data.recent || []).map((e) => `<tr><td class="muted">${esc(when(e.at))}</td><td>${e.kind === "new" ? pill(sev[e.severity] || "info") : pill("done")} ${esc(e.kind === "new" ? "appeared" : "resolved")}</td><td>${esc(e.title)}</td></tr>`).join("");
       $("view").innerHTML =
@@ -772,6 +777,33 @@
             state.views.upkeep = job.view;
           } catch (error) { $("meta").textContent = `failed: ${error.message}`; return; }
           render();
+        });
+        return;
+      }
+      const fix = event.target.closest("button[data-fix]");
+      if (fix) {
+        const { fix: kind, id, device, label, title } = fix.dataset;
+        const command = {
+          "server-update": `lmice servers update ${id} --yes --format json`,
+          "server-reboot": `lmice servers reboot ${id} --yes --format json`,
+          "backups-pull": "lmice backups pull --yes --format json",
+          "agents-desktop-on": `lmice agents desktop on --device ${device} --yes --format json`,
+        }[kind];
+        if (!command) return;
+        const note = {
+          "server-update": "Installs the pending updates on the server, detached, and waits for them (a few minutes). Services may restart briefly.",
+          "server-reboot": "Restarts the server and waits until it answers again (about a minute of downtime).",
+          "backups-pull": "Fetches missing backup copies and checks them.",
+          "agents-desktop-on": "Re-applies the agent desktops' firewall and checks it from inside.",
+        }[kind];
+        askConfirm(command, `${title}: ${note}`, async () => {
+          $("meta").textContent = `${label.toLowerCase()}…`;
+          try {
+            const job = await startJob({ kind, id, device });
+            const d = job.view?.data;
+            if (d && d.success === false) $("meta").textContent = `${label} did not finish cleanly: ${d.output || d.detail || ""}`;
+          } catch (error) { $("meta").textContent = `failed: ${error.message}`; return; }
+          load(true);
         });
         return;
       }
