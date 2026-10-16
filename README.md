@@ -19,6 +19,9 @@ The project is designed for small teams, labs, homelabs, and edge environments t
 - Keeps remote command execution disabled unless explicitly enabled.
 - Shows LinuxMice fleet views at `/fleet` when `lmice` is installed: repositories and
   folders across devices, per-location diffs, integrations and Plugroot-hosted services.
+- Vault tab (`lmice vault`): personal, business and work vaults with their own
+  keys; add logins in a form, copy without displaying, rotate a token everywhere
+  it is copied, and answer agents' requests to use a secret (also from the phone).
 
 ## Commands
 
@@ -142,6 +145,13 @@ Masterdale is built for private networks, not direct public exposure.
 - File APIs stay inside configured safe roots and refuse known secret/runtime filenames.
 - Remote command execution requires `DALE_REMOTE_EXEC=1`, safe roots, timeouts, and clear operator intent.
 - `comdale` drafts and plans only; it does not publish or contact customers automatically.
+- Vault actions need a signed-in OIDC session: the device token and local
+  requests are refused. The phone's approval endpoint is authorised by a
+  one-time code only the notification carries. `DALE_TOKEN` is re-read from
+  `.env` when it changes (`DALE_ENV_FILE` names another file), so a rotated
+  token applies without a restart.
+- When `daled` runs as a sandboxed systemd service, LinuxMice change jobs run
+  through the user's systemd manager (`DALE_LINUXMICE_RUNNER=direct` turns that off).
 
 See [SECURITY.md](SECURITY.md) and [docs/security.md](docs/security.md) before using this outside a local/private environment.
 
