@@ -73,6 +73,7 @@ var (
 	linuxmiceDevicePattern   = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`)
 	linuxmiceLocationPattern = regexp.MustCompile(`^~/[^\x00-\x1f]+$`)
 	linuxmiceIDPattern       = regexp.MustCompile(`^[a-z][a-z0-9-]{0,31}$`)
+	linuxmiceServicePattern  = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9@._:-]{0,127}$`)
 	linuxmiceUpstreamPattern = regexp.MustCompile(`^http://[0-9]{1,3}(\.[0-9]{1,3}){3}:[0-9]{1,5}$`)
 )
 
@@ -235,6 +236,23 @@ func (s *Server) handleLinuxMice(w http.ResponseWriter, r *http.Request) {
 			args = append(args, "--patch")
 		}
 		args = append(args, "--format", "json")
+	case "services", "ports":
+		device := query.Get("device")
+		if device == "" {
+			device = "lawnmower"
+		}
+		if !linuxmiceDevicePattern.MatchString(device) {
+			writeError(w, http.StatusBadRequest, errors.New("invalid device"))
+			return
+		}
+		args = []string{name, "--device", device, "--format", "json"}
+	case "logs":
+		device, unit := query.Get("device"), query.Get("name")
+		if !linuxmiceDevicePattern.MatchString(device) || !linuxmiceServicePattern.MatchString(unit) {
+			writeError(w, http.StatusBadRequest, errors.New("logs needs device=DEVICE and name=SERVICE"))
+			return
+		}
+		args = []string{"services", "logs", unit, "--device", device, "--lines", "200"}
 	case "compare":
 		a, b := query.Get("a"), query.Get("b")
 		if !linuxmiceDevicePattern.MatchString(a) || !linuxmiceDevicePattern.MatchString(b) {
@@ -447,6 +465,11 @@ func linuxmiceJobArgs(req LinuxMiceJobRequest) ([]string, bool, error) {
 			return nil, false, errors.New("pick a module")
 		}
 		return []string{"modules", strings.TrimPrefix(req.Kind, "module-"), req.ID}, true, nil
+	case "service-restart":
+		if !linuxmiceDevicePattern.MatchString(req.Device) || !linuxmiceServicePattern.MatchString(req.ID) {
+			return nil, false, errors.New("pick a device and a service")
+		}
+		return []string{"--yes", "services", "restart", req.ID, "--device", req.Device}, true, nil
 	case "fleet-capture":
 		return []string{"--yes", "fleet", "capture", "--commit"}, true, nil
 	case "fleet-apply":

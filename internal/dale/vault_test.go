@@ -121,3 +121,19 @@ func TestModuleJobsTakeOnlyAPlainID(t *testing.T) {
 		t.Fatal("a flag must not pass as a module")
 	}
 }
+
+func TestServiceRestartTakesOnlyPlainNames(t *testing.T) {
+	args, changes, err := linuxmiceJobArgs(LinuxMiceJobRequest{Kind: "service-restart", ID: "selfhost-ntfy", Device: "lawnmower"})
+	if err != nil || !changes || strings.Join(args, " ") != "--yes services restart selfhost-ntfy --device lawnmower" {
+		t.Fatalf("service-restart: %v %v %v", args, changes, err)
+	}
+	for _, bad := range []LinuxMiceJobRequest{
+		{Kind: "service-restart", ID: "--all", Device: "lawnmower"},
+		{Kind: "service-restart", ID: "x; reboot", Device: "lawnmower"},
+		{Kind: "service-restart", ID: "ntfy", Device: "-oProxyCommand"},
+	} {
+		if _, _, err := linuxmiceJobArgs(bad); err == nil {
+			t.Fatalf("%+v should be refused", bad)
+		}
+	}
+}

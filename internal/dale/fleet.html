@@ -204,6 +204,8 @@
     <button data-tab="upkeep" type="button">Upkeep</button>
     <button data-tab="hardware" type="button">Hardware</button>
     <button data-tab="compare" type="button">Compare</button>
+    <button data-tab="services" type="button">Services</button>
+    <button data-tab="ports" type="button">Ports</button>
     <button data-tab="fleetfile" type="button">Fleet file</button>
     <button data-tab="modules" type="button">Modules</button>
     <button data-tab="rescue" type="button">Recovery</button>
@@ -316,6 +318,7 @@
     async function load(force) {
       if (state.tab === "vault") { loadVault(); return; }
       if (state.tab === "compare") { renderCompareForm(); return; }
+      if (state.tab === "services" || state.tab === "ports") { loadDeviceView(state.tab, force); return; }
       const name = viewName();
       let path = `/v1/linuxmice/${name}`;
       const params = new URLSearchParams();
@@ -725,6 +728,35 @@
         `<div class="panel"><p>Backups that live on another machine (the kapotteke VPS), pulled here with a key that can only read their backup folder. Only the copies the retention keeps are fetched, each is checked against its checksum, and older ones are removed, so this stays small. ${data.scheduled ? "Pulled daily around 08:30." : "Not scheduled yet (<code>lmice backups schedule on</code>)."}</p><button data-backups-pull type="button" ${canChange ? "" : "disabled"}>Pull now…</button></div>`;
     }
 
+    async function loadDeviceView(kind, force) {
+      const devices = fleetDevices().length ? fleetDevices() : ["lawnmower", "mini", "nitori"];
+      state.opsDevice = state.opsDevice || "lawnmower";
+      $("cards").innerHTML = "";
+      $("view").innerHTML = `<div class="panel"><div class="toolbar"><select id="opsDevice">${devices.map((d) => `<option ${d === state.opsDevice ? "selected" : ""}>${esc(d)}</option>`).join("")}</select><button id="opsReload" type="button">Reload</button><span class="muted" id="opsMessage" role="status">loading…</span></div></div><div id="opsResult"></div>`;
+      $("opsDevice").addEventListener("change", () => { state.opsDevice = $("opsDevice").value; loadDeviceView(kind, false); });
+      $("opsReload").addEventListener("click", () => loadDeviceView(kind, true));
+      try {
+        const view = await api(`/v1/linuxmice/${kind}?device=${encodeURIComponent(state.opsDevice)}${force ? "&refresh=1" : ""}`);
+        if (view.error) throw new Error(view.error);
+        $("opsMessage").textContent = view.data.detail;
+        (kind === "services" ? showServices : showPorts)(view.data);
+      } catch (error) { $("opsMessage").textContent = `failed: ${error.message}`; }
+    }
+
+    function showServices(d) {
+      const canChange = state.caps?.actions_enabled;
+      const level = (s) => s === "active" || s === "running" ? "ok" : s === "failed" ? "critical" : s === "exited" ? "warn" : "unknown";
+      const rows = d.services.map((s) => `<tr><td>${esc(s.kind)}</td><td><b>${esc(s.name)}</b></td><td>${pill(level(s.state))} <span class="muted">${esc(s.state)}</span></td><td class="detail">${esc(s.detail)}</td><td><button data-logs="${esc(s.name)}" type="button">Logs</button> <button data-restart="${esc(s.name)}" type="button" ${canChange ? "" : "disabled"}>Restart…</button></td></tr>`).join("");
+      $("opsResult").innerHTML = `<div class="scroll"><table><thead><tr><th>Kind</th><th>Name</th><th>State</th><th>Detail</th><th></th></tr></thead><tbody>${rows}</tbody></table></div><pre class="panel" id="opsLogs" hidden></pre><div class="panel"><p><code>lmice services --device ${esc(d.device)}</code> · <code>lmice services logs NAME</code> · <code>lmice services restart NAME</code></p></div>`;
+    }
+
+    function showPorts(d) {
+      const level = (r) => r === "this device" ? "ok" : r === "tailnet" || r === "wireguard" || r === "docker" ? "ok" : r === "lan" ? "warn" : "warn";
+      const rows = d.ports.map((p) => `<tr><td>${esc(p.proto)}</td><td><b>${p.port}</b></td><td>${esc(p.address)}</td><td>${esc(p.process)}</td><td>${pill(level(p.reach))} ${esc(p.reach)}</td><td class="detail">${p.rules.map(esc).join("<br>")}</td></tr>`).join("");
+      $("cards").innerHTML = `<div class="card"><strong>Firewall</strong><span>${esc(d.firewall)}</span></div>`;
+      $("opsResult").innerHTML = `<div class="scroll"><table><thead><tr><th>Proto</th><th>Port</th><th>Address</th><th>Program</th><th>Who can reach it</th><th>Firewall rules</th></tr></thead><tbody>${rows}</tbody></table></div><div class="panel"><p><code>lmice ports --device ${esc(d.device)}</code></p></div>`;
+    }
+
     function renderCompareForm() {
       const devices = fleetDevices();
       const pick = (id, value) => `<select id="${id}">${(devices.length ? devices : ["lawnmower", "mini", "nitori"]).map((d) => `<option ${d === value ? "selected" : ""}>${esc(d)}</option>`).join("")}</select>`;
@@ -1079,6 +1111,24 @@
       } catch (error) { vaultMessage(`Not added: ${error.message}`); return; }
       await loadVault(true); renderVault();
     });
+    $("view").addEventListener("click", async (event) => {
+      if (state.tab !== "services") return;
+      const b = event.target.closest("button");
+      if (!b) return;
+      if (b.dataset.logs) {
+        const box = $("opsLogs"); box.hidden = false; box.textContent = `loading the logs of ${b.dataset.logs}…`;
+        try { const view = await api(`/v1/linuxmice/logs?device=${encodeURIComponent(state.opsDevice)}&name=${encodeURIComponent(b.dataset.logs)}&refresh=1`); box.textContent = view.error || (view.data?.lines || []).join("\n") || "no log lines"; } catch (error) { box.textContent = `failed: ${error.message}`; }
+        return;
+      }
+      if (b.dataset.restart) {
+        const name = b.dataset.restart, device = state.opsDevice;
+        askConfirm(`lmice services restart ${name} --device ${device}`, "Stops and starts it; it is unavailable for a moment.", async () => {
+          const job = await startJob({ kind: "service-restart", id: name, device });
+          $("opsMessage").textContent = job.state === "done" ? `restarted ${name}` : `failed: ${job.view.error || ""}`;
+          loadDeviceView("services", true);
+        });
+      }
+    });
     $("view").addEventListener("click", (event) => {
       if (state.tab !== "modules") return;
       const b = event.target.closest("button[data-module]");
@@ -1184,6 +1234,8 @@
       integrations: ["Integrations", "Optional connections LinuxMice uses on each device. Turn them on or off."],
       modules: ["Modules", "LinuxMice is a small core plus building blocks. Switch a block off and its commands, checks, timer and pages disappear on this machine; nothing is deleted."],
       fleetfile: ["Fleet file", "Every machine, what it is for and what it runs, in one file. With it and last night's backup, any of them can be rebuilt on a fresh machine."],
+      services: ["Services", "Everything that runs on a machine: system and user services, timers and containers. Read a service's logs or restart it."],
+      ports: ["Ports", "What listens where, and who can reach it: this machine only, the tailnet, WireGuard, the LAN, or every interface with the firewall deciding."],
       compare: ["Compare", "What is installed and running on two machines, side by side: how alike they are, what only one has, and where versions differ."],
       hardware: ["Hardware", "What each machine is, what it can still take, and what it costs to keep running, next to machines you could buy."],
       https: ["HTTPS", "Addresses like https://lawnmower.katteke.internal:3443 with Katteke's own certificates, reachable over the tailnet and LinuxMice's WireGuard, without Tailscale's."],
