@@ -203,6 +203,7 @@
     <button data-tab="tools" type="button">Tools</button>
     <button data-tab="upkeep" type="button">Upkeep</button>
     <button data-tab="hardware" type="button">Hardware</button>
+    <button data-tab="compare" type="button">Compare</button>
     <button data-tab="fleetfile" type="button">Fleet file</button>
     <button data-tab="rescue" type="button">Recovery</button>
     <div class="group">Your work</div>
@@ -313,6 +314,7 @@
 
     async function load(force) {
       if (state.tab === "vault") { loadVault(); return; }
+      if (state.tab === "compare") { renderCompareForm(); return; }
       const name = viewName();
       let path = `/v1/linuxmice/${name}`;
       const params = new URLSearchParams();
@@ -722,6 +724,38 @@
         `<div class="panel"><p>Backups that live on another machine (the kapotteke VPS), pulled here with a key that can only read their backup folder. Only the copies the retention keeps are fetched, each is checked against its checksum, and older ones are removed, so this stays small. ${data.scheduled ? "Pulled daily around 08:30." : "Not scheduled yet (<code>lmice backups schedule on</code>)."}</p><button data-backups-pull type="button" ${canChange ? "" : "disabled"}>Pull now…</button></div>`;
     }
 
+    function renderCompareForm() {
+      const devices = fleetDevices();
+      const pick = (id, value) => `<select id="${id}">${(devices.length ? devices : ["lawnmower", "mini", "nitori"]).map((d) => `<option ${d === value ? "selected" : ""}>${esc(d)}</option>`).join("")}</select>`;
+      $("cards").innerHTML = "";
+      $("meta").textContent = "";
+      $("view").innerHTML = `<div class="panel"><div class="toolbar">${pick("cmpA", state.cmpA || "lawnmower")}<span>with</span>${pick("cmpB", state.cmpB || "mini")}<button class="primary" id="cmpGo" type="button">Compare</button><span class="muted" id="cmpMessage" role="status"></span></div></div><div id="cmpResult"></div>`;
+      $("cmpGo").addEventListener("click", runCompare);
+      if (state.cmpResult) showCompare(state.cmpResult);
+    }
+
+    async function runCompare() {
+      state.cmpA = $("cmpA").value; state.cmpB = $("cmpB").value;
+      $("cmpMessage").textContent = "reading both machines…";
+      try {
+        const view = await api(`/v1/linuxmice/compare?a=${encodeURIComponent(state.cmpA)}&b=${encodeURIComponent(state.cmpB)}&refresh=1`);
+        if (view.error) throw new Error(view.error);
+        state.cmpResult = view.data; showCompare(view.data); $("cmpMessage").textContent = "";
+      } catch (error) { $("cmpMessage").textContent = `failed: ${error.message}`; }
+    }
+
+    function showCompare(d) {
+      const list = (items) => items.length ? items.slice(0, 40).map(esc).join(", ") + (items.length > 40 ? ` <span class="muted">+${items.length - 40} more</span>` : "") : `<span class="muted">none</span>`;
+      $("cards").innerHTML = `<div class="card"><strong>${d.alike_pct}% alike</strong><span>${esc(d.a)} and ${esc(d.b)}</span></div><div class="card"><strong>${d.b_has_of_a_pct}%</strong><span>of ${esc(d.a)}'s things are on ${esc(d.b)}</span></div><div class="card"><strong>${d.a_has_of_b_pct}%</strong><span>of ${esc(d.b)}'s things are on ${esc(d.a)}</span></div>`;
+      const rows = d.categories.map((c) => `<tr><td><b>${esc(c.category)}</b></td><td>${c.a_count}</td><td>${c.b_count}</td><td>${c.both}</td><td>${c.alike_pct}%</td></tr>`).join("");
+      const details = d.categories.filter((c) => c.only_a.length || c.only_b.length || c.versions_differ.length).map((c) => `<div class="panel"><h3>${esc(c.category)}</h3><table><tbody>
+        <tr><th>Only on ${esc(d.a)}</th><td>${list(c.only_a)}</td></tr>
+        <tr><th>Only on ${esc(d.b)}</th><td>${list(c.only_b)}</td></tr>
+        ${c.versions_differ.length ? `<tr><th>Other versions</th><td>${c.versions_differ.slice(0, 30).map(([n, a, b]) => `${esc(n)} <span class="muted">${esc(a)} vs ${esc(b)}</span>`).join("<br>")}</td></tr>` : ""}
+      </tbody></table></div>`).join("");
+      $("cmpResult").innerHTML = `<div class="scroll"><table><thead><tr><th>Category</th><th>${esc(d.a)}</th><th>${esc(d.b)}</th><th>Both</th><th>Alike</th></tr></thead><tbody>${rows}</tbody></table></div>${details}<div class="panel"><p><code>lmice inventory compare ${esc(d.a)} ${esc(d.b)}</code></p></div>`;
+    }
+
     function renderFleetFile(data) {
       const canChange = state.caps?.actions_enabled;
       const list = (label, items) => items?.length ? `<tr><th>${label}</th><td>${items.map(esc).join(", ")}</td></tr>` : "";
@@ -1115,6 +1149,7 @@
       selfhost: ["Self-hosting", "The services you host yourself, and whether they're up."],
       integrations: ["Integrations", "Optional connections LinuxMice uses on each device. Turn them on or off."],
       fleetfile: ["Fleet file", "Every machine, what it is for and what it runs, in one file. With it and last night's backup, any of them can be rebuilt on a fresh machine."],
+      compare: ["Compare", "What is installed and running on two machines, side by side: how alike they are, what only one has, and where versions differ."],
       hardware: ["Hardware", "What each machine is, what it can still take, and what it costs to keep running, next to machines you could buy."],
       https: ["HTTPS", "Addresses like https://lawnmower.katteke.internal:3443 with Katteke's own certificates, reachable over the tailnet and LinuxMice's WireGuard, without Tailscale's."],
       backups: ["Backups", "Backups pulled from other machines, how fresh they are, and whether they can be read."],

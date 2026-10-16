@@ -234,6 +234,13 @@ func (s *Server) handleLinuxMice(w http.ResponseWriter, r *http.Request) {
 			args = append(args, "--patch")
 		}
 		args = append(args, "--format", "json")
+	case "compare":
+		a, b := query.Get("a"), query.Get("b")
+		if !linuxmiceDevicePattern.MatchString(a) || !linuxmiceDevicePattern.MatchString(b) {
+			writeError(w, http.StatusBadRequest, errors.New("compare needs a=DEVICE and b=DEVICE"))
+			return
+		}
+		args = []string{"inventory", "compare", a, b, "--format", "json"}
 	case "selfhost":
 		args = []string{"selfhost", "--format", "json"}
 		if device := query.Get("device"); device != "" {
