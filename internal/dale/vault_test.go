@@ -64,3 +64,18 @@ func TestOnlyThePhoneAnswerSkipsTheSession(t *testing.T) {
 		}
 	}
 }
+
+func TestVaultActionsNeedASignedInPersonEvenLocally(t *testing.T) {
+	t.Setenv("DALE_LINUXMICE_ACTIONS", "1")
+	s := &Server{linuxmice: &linuxmiceCache{}}
+	for _, path := range []string{"/v1/vault/reveal", "/v1/vault/add", "/v1/vault/rotate", "/v1/vault/decide"} {
+		r := httptest.NewRequest("POST", path, nil)
+		r.Header.Set("Content-Type", "application/json")
+		r.RemoteAddr = "127.0.0.1:5000"
+		w := httptest.NewRecorder()
+		s.handleVault(w, r)
+		if w.Code != 403 {
+			t.Fatalf("%s from loopback without a session: %d", path, w.Code)
+		}
+	}
+}

@@ -155,6 +155,12 @@ func (s *Server) handleVault(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusForbidden, errors.New("vault actions need a same-origin JSON request"))
 		return
 	}
+	// A person, signed in: not the device token and not a local request,
+	// which every program on this machine (an agent too) could make.
+	if s.oidc == nil || !s.oidc.authorizeSession(r) {
+		writeError(w, http.StatusForbidden, errors.New("vault actions need you signed in to Masterdale (a device token or a local request is not enough)"))
+		return
+	}
 	if !LinuxMiceActionsEnabled() {
 		writeError(w, http.StatusForbidden, errors.New("changes are turned off on this node (DALE_LINUXMICE_ACTIONS)"))
 		return
@@ -229,18 +235,17 @@ func (s *Server) handleVault(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-store")
 		writeJSON(w, http.StatusOK, map[string]string{"value": string(out)})
 	case "decide":
-		// The Vault tab's own Allow/Deny: the signed-in session, plus the
-		// request's one-time code that the list shows it.
+		// The Vault tab's own Allow/Deny: the signed-in session is the
+		// authorisation (lmice accepts "-" for the code only from Masterdale).
 		var req struct {
 			ID     string `json:"id"`
-			Code   string `json:"code"`
 			Answer string `json:"answer"`
 		}
 		if err := json.NewDecoder(body).Decode(&req); err != nil {
 			writeError(w, http.StatusBadRequest, errors.New("invalid request"))
 			return
 		}
-		s.vaultAnswer(w, r, req.ID, req.Code, req.Answer)
+		s.vaultAnswer(w, r, req.ID, "-", req.Answer)
 	default:
 		writeError(w, http.StatusNotFound, errors.New("unknown vault action"))
 	}
@@ -272,7 +277,7 @@ func (s *Server) handleVaultAnswer(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) vaultAnswer(w http.ResponseWriter, r *http.Request, id, code, answer string) {
-	if !vaultHexPattern.MatchString(id) || !vaultHexPattern.MatchString(code) {
+	if !vaultHexPattern.MatchString(id) || (code != "-" && !vaultHexPattern.MatchString(code)) {
 		writeError(w, http.StatusBadRequest, errors.New("unknown request"))
 		return
 	}

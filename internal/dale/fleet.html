@@ -809,7 +809,7 @@
       if (!d.ready) { $("view").innerHTML = `<div class="empty">${esc(d.detail)}</div>`; return; }
       const canChange = state.caps?.actions_enabled;
       const when = (t) => new Date(t * 1000).toLocaleTimeString();
-      const requests = d.requests.map((r) => `<div class="panel">${pill("warn")} <b>${esc(r.via)}</b> wants <b>${esc(r.secret)}</b> for <code>${esc(r.purpose)}</code> <span class="muted">· ${esc(when(r.at))}</span><div class="toolbar">${["allow", "hour", "deny"].map((a) => `<button data-vault-decide="${a}" data-id="${esc(r.id)}" data-code="${esc(r.code)}" type="button" ${a === "deny" ? 'class="danger"' : ""}>${{ allow: "Allow once", hour: "Allow 1 hour", deny: "Deny" }[a]}</button>`).join("")}</div></div>`).join("");
+      const requests = d.requests.map((r) => `<div class="panel">${pill("warn")} <b>${esc(r.via)}</b> wants <b>${esc(r.secret)}</b> for <code>${esc(r.purpose)}</code> <span class="muted">· ${esc(when(r.at))}</span><div class="toolbar">${["allow", "hour", "deny"].map((a) => `<button data-vault-decide="${a}" data-id="${esc(r.id)}" type="button" ${a === "deny" ? 'class="danger"' : ""}>${{ allow: "Allow once", hour: "Allow 1 hour", deny: "Deny" }[a]}</button>`).join("")}</div></div>`).join("");
       const counts = Object.fromEntries(d.vaults.map((name) => [name, d.entries.filter((e) => e.vault === name).length]));
       const rows = d.entries.filter((e) => e.vault === v.which).map((e) => `<tr><td><b>${esc(e.name)}</b><br><span class="muted">${esc(e.kind)}${e.changed ? ` · changed ${esc(e.changed)}` : ""}</span></td><td>${esc(e.user || "-")}</td><td class="detail">${esc((e.domains || []).join(" ") || "-")}</td><td class="detail">${(e.targets || []).length ? e.targets.map((t) => `${esc(t.device)}:${esc(t.file)}`).join("<br>") : "-"}</td><td><div class="toolbar"><button data-vault-copy="${esc(e.name)}" type="button">Copy password</button>${(e.targets || []).length ? `<button data-vault-rotate="${esc(e.name)}" type="button" ${canChange ? "" : "disabled"}>Rotate…</button>` : ""}<button data-vault-remove="${esc(e.name)}" type="button" ${canChange ? "" : "disabled"}>Remove…</button></div></td></tr>`).join("");
       $("view").innerHTML = requests +
@@ -869,7 +869,7 @@
         return;
       }
       if (b.dataset.vaultDecide) {
-        try { await vaultAction("decide", { id: b.dataset.id, code: b.dataset.code, answer: b.dataset.vaultDecide }); v.message = "answered"; } catch (error) { v.message = `failed: ${error.message}`; }
+        try { await vaultAction("decide", { id: b.dataset.id, answer: b.dataset.vaultDecide }); v.message = "answered"; } catch (error) { v.message = `failed: ${error.message}`; }
         loadVault();
         return;
       }
