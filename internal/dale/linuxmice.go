@@ -61,6 +61,8 @@ var linuxmiceViews = map[string][]string{
 	"attention":    {"attention", "--format", "json"},
 	"https":        {"https", "--format", "json"},
 	"hardware":     {"hardware", "compare", "--format", "json"},
+	"fleetfile":    {"fleet", "file", "--format", "json"},
+	"fleetdiff":    {"fleet", "diff", "--format", "json"},
 	// Not served as a view: names this node for the page.
 	"integrations-local": {"integrations", "--format", "json"},
 }
@@ -432,6 +434,13 @@ func linuxmiceJobArgs(req LinuxMiceJobRequest) ([]string, bool, error) {
 		return append(args, "--yes", "--format", "json"), true, nil
 	case "https-apply":
 		return []string{"--yes", "https", "apply"}, true, nil
+	case "fleet-capture":
+		return []string{"--yes", "fleet", "capture", "--commit"}, true, nil
+	case "fleet-apply":
+		if !linuxmiceDevicePattern.MatchString(req.Device) {
+			return nil, false, errors.New("pick a device")
+		}
+		return []string{"--yes", "fleet", "apply", "--device", req.Device}, true, nil
 	case "https-add":
 		port, err := strconv.Atoi(req.A)
 		if !linuxmiceIDPattern.MatchString(req.ID) || err != nil || port < 1024 || port > 65535 || !linuxmiceUpstreamPattern.MatchString(req.B) {

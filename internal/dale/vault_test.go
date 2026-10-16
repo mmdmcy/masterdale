@@ -97,3 +97,16 @@ func TestHTTPSJobsTakeOnlyPlainNamesPortsAndPrivateUpstreams(t *testing.T) {
 		}
 	}
 }
+
+func TestFleetJobsTakeOnlyAPlainDevice(t *testing.T) {
+	args, changes, err := linuxmiceJobArgs(LinuxMiceJobRequest{Kind: "fleet-apply", Device: "lawnmower"})
+	if err != nil || !changes || args[len(args)-1] != "lawnmower" {
+		t.Fatalf("fleet-apply: %v %v %v", args, changes, err)
+	}
+	if _, _, err := linuxmiceJobArgs(LinuxMiceJobRequest{Kind: "fleet-apply", Device: "--as"}); err == nil {
+		t.Fatal("a flag must not pass as a device")
+	}
+	if args, _, err := linuxmiceJobArgs(LinuxMiceJobRequest{Kind: "fleet-capture"}); err != nil || args[len(args)-1] != "--commit" {
+		t.Fatalf("fleet-capture: %v %v", args, err)
+	}
+}

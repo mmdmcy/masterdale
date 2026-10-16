@@ -203,6 +203,7 @@
     <button data-tab="tools" type="button">Tools</button>
     <button data-tab="upkeep" type="button">Upkeep</button>
     <button data-tab="hardware" type="button">Hardware</button>
+    <button data-tab="fleetfile" type="button">Fleet file</button>
     <button data-tab="rescue" type="button">Recovery</button>
     <div class="group">Your work</div>
     <button data-tab="repos" type="button">Repositories</button>
@@ -350,7 +351,7 @@
         $("view").innerHTML = `<div class="empty">${esc(view?.error || view?.hint || "No data")}</div>`;
         return;
       }
-      ({ attention: renderAttention, repos: renderRepos, folders: renderFolders, devices: renderDevices, move: renderMove, upkeep: renderUpkeep, agents: renderAgents, projects: renderProjects, tools: renderTools, setup: renderSetup, integrations: renderIntegrations, selfhost: renderSelfhost, backups: renderBackups, https: renderHttps, hardware: renderHardware, org: renderOrg, rescue: renderRescue })[state.tab](view.data);
+      ({ attention: renderAttention, repos: renderRepos, folders: renderFolders, devices: renderDevices, move: renderMove, upkeep: renderUpkeep, agents: renderAgents, projects: renderProjects, tools: renderTools, setup: renderSetup, integrations: renderIntegrations, selfhost: renderSelfhost, backups: renderBackups, https: renderHttps, hardware: renderHardware, fleetfile: renderFleetFile, org: renderOrg, rescue: renderRescue })[state.tab](view.data);
     }
 
     function renderAttention(data) {
@@ -721,6 +722,34 @@
         `<div class="panel"><p>Backups that live on another machine (the kapotteke VPS), pulled here with a key that can only read their backup folder. Only the copies the retention keeps are fetched, each is checked against its checksum, and older ones are removed, so this stays small. ${data.scheduled ? "Pulled daily around 08:30." : "Not scheduled yet (<code>lmice backups schedule on</code>)."}</p><button data-backups-pull type="button" ${canChange ? "" : "disabled"}>Pull now…</button></div>`;
     }
 
+    function renderFleetFile(data) {
+      const canChange = state.caps?.actions_enabled;
+      const list = (label, items) => items?.length ? `<tr><th>${label}</th><td>${items.map(esc).join(", ")}</td></tr>` : "";
+      $("cards").innerHTML = `<div class="card"><strong>${esc(data.name)}</strong><span>${data.devices.length} machines · ${esc(data.fleet_file)}</span></div>`;
+      const devices = data.devices.map((d) => `<div class="panel"><h3>${esc(d.name)}</h3><p>${esc(d.does)}</p><table><tbody>
+        ${list("LinuxMice settings", d.linuxmice)}
+        ${d.plugroot ? `<tr><th>Plugroot</th><td>runs its services</td></tr>` : ""}
+        ${list("Files", d.files)}
+        ${list("Services", d.services)}
+        ${list("Timers", d.schedules)}
+        ${list("Tools", d.tools)}
+        ${d.restore ? `<tr><th>Backup</th><td>restored from last night's backup on a rebuild</td></tr>` : ""}
+        ${list("Checks", d.checks)}
+      </tbody></table><div class="toolbar"><button data-fleet-apply="${esc(d.name)}" type="button" ${canChange ? "" : "disabled"}>Make ${esc(d.name)} match…</button></div></div>`).join("");
+      $("view").innerHTML = `<div class="panel"><div class="toolbar"><button class="primary" data-fleet-diff type="button">Check for drift</button><button data-fleet-capture type="button" ${canChange ? "" : "disabled"}>Capture and commit now</button><span class="muted" id="fleetMessage" role="status"></span></div><div id="fleetDrift"></div></div>` + devices +
+        `<div class="panel"><p>A fresh machine becomes one of these from the Mac, which holds the backup key: <code>lmice fleet rebuild NEW-MACHINE --as lawnmower</code>. Prove it first with <code>--drill</code> on a spare machine. Every night lawnmower captures what each machine runs and commits it (<code>lmice fleet schedule on</code>).</p></div>`;
+    }
+
+    async function showFleetDrift() {
+      $("fleetMessage").textContent = "comparing every machine with the file…";
+      try {
+        const view = await api("/v1/linuxmice/fleetdiff?refresh=1");
+        const rows = view.data.devices.map((d) => `<tr><td><b>${esc(d.device)}</b></td><td>${pill(d.state === "same" ? "ok" : d.state === "drifted" ? "warn" : "unknown")}</td><td class="detail">${esc(d.detail)}${(d.files || []).slice(0, 8).map(([path, how]) => `<br><span class="muted">${esc(how)}</span> ${esc(path)}`).join("")}${(d.missing || []).map((m) => `<br><span class="muted">missing</span> ${esc(m)}`).join("")}</td></tr>`).join("");
+        $("fleetDrift").innerHTML = `<div class="scroll"><table><thead><tr><th>Machine</th><th>State</th><th>Detail</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+        $("fleetMessage").textContent = "";
+      } catch (error) { $("fleetMessage").textContent = `failed: ${error.message}`; }
+    }
+
     function renderHardware(data) {
       const gb = (b) => `${Math.round(b / 2 ** 30)} GB`;
       const disk = (d) => `${d.bytes >= 1e12 ? (d.bytes / 1e12).toFixed(1) + " TB" : Math.round(d.bytes / 1e9) + " GB"} ${esc(d.kind)} <span class="muted">${esc(d.model)}</span>`;
@@ -995,6 +1024,22 @@
       await loadVault(true); renderVault();
     });
     $("view").addEventListener("click", (event) => {
+      if (state.tab !== "fleetfile") return;
+      const b = event.target.closest("button");
+      if (!b) return;
+      if (b.hasAttribute("data-fleet-diff")) { showFleetDrift(); return; }
+      const device = b.dataset.fleetApply;
+      if (!device && !b.hasAttribute("data-fleet-capture")) return;
+      const request = device ? { kind: "fleet-apply", device } : { kind: "fleet-capture" };
+      askConfirm(device ? `lmice fleet apply --device ${device}` : "lmice fleet capture --commit",
+        device ? "Puts the fleet file's settings back on the machine (the old ones are kept as .bak-fleet-*) and turns on its services, HTTPS sites and timers." : "Copies what every machine runs now into the fleet file, then commits and pushes it.",
+        async () => {
+          const job = await startJob(request);
+          $("fleetMessage").textContent = job.state === "done" ? "done" : `failed: ${job.view.error || ""}`;
+          if (device) showFleetDrift();
+        });
+    });
+    $("view").addEventListener("click", (event) => {
       if (state.tab !== "https") return;
       const b = event.target.closest("button");
       if (!b) return;
@@ -1069,6 +1114,7 @@
       projects: ["Projects", "Your projects and where each stands. Retired ones can be tidied away."],
       selfhost: ["Self-hosting", "The services you host yourself, and whether they're up."],
       integrations: ["Integrations", "Optional connections LinuxMice uses on each device. Turn them on or off."],
+      fleetfile: ["Fleet file", "Every machine, what it is for and what it runs, in one file. With it and last night's backup, any of them can be rebuilt on a fresh machine."],
       hardware: ["Hardware", "What each machine is, what it can still take, and what it costs to keep running, next to machines you could buy."],
       https: ["HTTPS", "Addresses like https://lawnmower.katteke.internal:3443 with Katteke's own certificates, reachable over the tailnet and LinuxMice's WireGuard, without Tailscale's."],
       backups: ["Backups", "Backups pulled from other machines, how fresh they are, and whether they can be read."],
