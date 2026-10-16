@@ -252,7 +252,7 @@ func (s *Server) handleLinuxMice(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, errors.New("logs needs device=DEVICE and name=SERVICE"))
 			return
 		}
-		args = []string{"services", "logs", unit, "--device", device, "--lines", "200"}
+		args = []string{"services", "logs", unit, "--device", device, "--lines", "200", "--format", "json"}
 	case "compare":
 		a, b := query.Get("a"), query.Get("b")
 		if !linuxmiceDevicePattern.MatchString(a) || !linuxmiceDevicePattern.MatchString(b) {
