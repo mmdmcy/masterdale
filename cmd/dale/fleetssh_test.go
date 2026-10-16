@@ -37,7 +37,7 @@ func TestMarshalOpenSSHPrivateKeyIsReadableBySSHKeygen(t *testing.T) {
 }
 
 func TestSSHConfigLinesHaveAlias(t *testing.T) {
-	config := "Host mini\n  HostName 100.93.10.92\n\nHost windowspc desktop-a34ht70\n  User homer\n"
+	config := "Host mini\n  HostName 100.64.0.10\n\nHost windowspc desktop-a34ht70\n  User homer\n"
 	for _, alias := range []string{"mini", "windowspc", "DESKTOP-A34HT70"} {
 		if !sshConfigLinesHaveAlias(config, alias) {
 			t.Fatalf("expected alias %q to be present", alias)

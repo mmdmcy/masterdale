@@ -377,7 +377,7 @@
         (items ? `<div class="scroll"><table><thead><tr><th></th><th>What</th><th>How to fix it</th></tr></thead><tbody>${items}</tbody></table></div>` : `<div class="empty">All clear: devices, servers, backups, deploys and agent desktops are fine.</div>`) +
         (failed.length ? `<p class="muted">Could not check: ${failed.map((s) => `${esc(s.name)} (${esc(s.detail)})`).join("; ")}</p>` : "") +
         `<h3>What happened</h3>` + (recent ? `<div class="scroll"><table><tbody>${recent}</tbody></table></div>` : `<p class="muted">Nothing recorded yet; the 30-minute check records what appears and what gets resolved.</p>`) +
-        `<p class="muted">Checked: ${data.sources.map((s) => `${esc(s.name)} ${s.status === "ok" ? "✓" : "✗"}`).join(" · ")}. On your phone: install the ntfy app, add the server <code>https://lawnmower.tail359cf9.ts.net:8447</code> and subscribe to <code>fleet</code> (Tailscale must be on). <code>lmice attention</code> shows the same.</p>`;
+        `<p class="muted">Checked: ${data.sources.map((s) => `${esc(s.name)} ${s.status === "ok" ? "✓" : "✗"}`).join(" · ")}. On your phone: install the ntfy app, add the ntfy server and topic from <code>~/.config/linuxmice/attention.toml</code> (it is reachable over the tailnet only). <code>lmice attention</code> shows the same.</p>`;
     }
 
     function deviceCards(data) {
