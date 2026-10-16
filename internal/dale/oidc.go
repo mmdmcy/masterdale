@@ -27,17 +27,33 @@ const (
 )
 
 type OIDCConfig struct {
-	Issuer          string
-	ClientID        string
-	ClientSecret    string
+	Issuer       string
+	ClientID     string
+	ClientSecret string
+	// RedirectURL is the first of DALE_OIDC_REDIRECT_URL's comma-separated
+	// callbacks; RedirectURLs holds them all, one per address Masterdale is
+	// reached at (its Tailscale and its katteke.internal address, ADR 0066).
 	RedirectURL     string
+	RedirectURLs    []string
 	AllowedSubjects map[string]struct{}
+}
+
+// redirectFor picks the callback on the address the browser used, so a
+// sign-in started at one address comes back to it; the first otherwise.
+func (c *OIDCConfig) redirectFor(host string) string {
+	for _, candidate := range c.RedirectURLs {
+		if parsed, err := url.Parse(candidate); err == nil && strings.EqualFold(parsed.Host, host) {
+			return candidate
+		}
+	}
+	return c.RedirectURL
 }
 
 type oidcPendingFlow struct {
 	browserTokenHash [32]byte
 	nonce            string
 	verifier         string
+	redirectURL      string
 	expiresAt        time.Time
 }
 
@@ -77,8 +93,20 @@ func loadOIDCConfig() (*OIDCConfig, error) {
 	if err := validateOIDCURL("DALE_OIDC_ISSUER", values[0], false); err != nil {
 		return nil, err
 	}
-	if err := validateOIDCURL("DALE_OIDC_REDIRECT_URL", values[3], true); err != nil {
-		return nil, err
+	// DALE_OIDC_EXTRA_REDIRECT_URLS adds callbacks outside the secret .env
+	// (a systemd drop-in), e.g. Masterdale's katteke.internal address.
+	var redirects []string
+	for _, redirect := range strings.Split(values[3]+","+os.Getenv("DALE_OIDC_EXTRA_REDIRECT_URLS"), ",") {
+		if redirect = strings.TrimSpace(redirect); redirect == "" {
+			continue
+		}
+		if err := validateOIDCURL("DALE_OIDC_REDIRECT_URL", redirect, true); err != nil {
+			return nil, err
+		}
+		redirects = append(redirects, redirect)
+	}
+	if len(redirects) == 0 {
+		return nil, errors.New("DALE_OIDC_REDIRECT_URL must contain at least one callback")
 	}
 	allowed := make(map[string]struct{})
 	for _, subject := range strings.Split(values[4], ",") {
@@ -91,7 +119,7 @@ func loadOIDCConfig() (*OIDCConfig, error) {
 	}
 	return &OIDCConfig{
 		Issuer: values[0], ClientID: values[1], ClientSecret: values[2],
-		RedirectURL: values[3], AllowedSubjects: allowed,
+		RedirectURL: redirects[0], RedirectURLs: redirects, AllowedSubjects: allowed,
 	}, nil
 }
 
@@ -171,6 +199,7 @@ func (s *Server) handleOIDCStart(w http.ResponseWriter, r *http.Request) {
 	if !s.oidc.storeFlow(state, oidcPendingFlow{
 		browserTokenHash: sha256.Sum256([]byte(browserToken)),
 		nonce:            nonce, verifier: verifier, expiresAt: time.Now().Add(oidcFlowTTL),
+		redirectURL: s.oidc.config.redirectFor(r.Host),
 	}) {
 		http.Error(w, "Too many pending sign-ins", http.StatusTooManyRequests)
 		return
@@ -181,7 +210,9 @@ func (s *Server) handleOIDCStart(w http.ResponseWriter, r *http.Request) {
 		SameSite: http.SameSiteLaxMode,
 	})
 	challenge := base64.RawURLEncoding.EncodeToString(sha256Bytes(verifier))
-	authURL, err := provider.authCodeURL(s.oidc.config, state, nonce, challenge)
+	config := *s.oidc.config
+	config.RedirectURL = config.redirectFor(r.Host)
+	authURL, err := provider.authCodeURL(&config, state, nonce, challenge)
 	if err != nil {
 		http.Error(w, "LinuxMice sign-in is temporarily unavailable", http.StatusServiceUnavailable)
 		return
@@ -218,7 +249,11 @@ func (s *Server) handleOIDCCallback(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "LinuxMice sign-in is temporarily unavailable", http.StatusServiceUnavailable)
 		return
 	}
-	token, err := provider.exchangeCode(r.Context(), s.oidc.config, code, flow.verifier)
+	config := *s.oidc.config
+	if flow.redirectURL != "" {
+		config.RedirectURL = flow.redirectURL
+	}
+	token, err := provider.exchangeCode(r.Context(), &config, code, flow.verifier)
 	if err != nil {
 		http.Error(w, "LinuxMice sign-in failed", http.StatusBadGateway)
 		return
