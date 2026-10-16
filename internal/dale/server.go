@@ -34,6 +34,7 @@ type Server struct {
 	dashboardCache *dashboardCache
 	linuxmice      *linuxmiceCache
 	oidc           *oidcRuntime
+	token          *tokenSource
 }
 
 func NewServer(cfg Config, store *Store) *Server {
@@ -41,6 +42,7 @@ func NewServer(cfg Config, store *Store) *Server {
 		cfg: cfg, store: store, mux: http.NewServeMux(), dashboardCache: newDashboardCache(),
 		linuxmice: &linuxmiceCache{},
 		oidc:      newOIDCRuntime(cfg.OIDC),
+		token:     newTokenSource(cfg.AccessToken),
 	}
 	s.routes()
 	return s
@@ -90,7 +92,7 @@ func (s *Server) authMiddleware(next http.Handler) http.Handler {
 			writeError(w, http.StatusForbidden, errors.New("remote access is restricted to loopback and private-network addresses by default; set DALE_REMOTE_SCOPE=public only if a firewall or reverse proxy protects this service"))
 			return
 		}
-		if r.URL.Path == "/healthz" || isDashboardShellRequest(r) || isOIDCRoute(r) || isDirectLoopbackRequest(r) {
+		if r.URL.Path == "/healthz" || isDashboardShellRequest(r) || isOIDCRoute(r) || isDirectLoopbackRequest(r) || isVaultAnswerRoute(r) {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -98,11 +100,12 @@ func (s *Server) authMiddleware(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
-		if s.cfg.AccessToken == "" {
+		token := s.token.current()
+		if token == "" {
 			writeError(w, http.StatusUnauthorized, errors.New("authorization required"))
 			return
 		}
-		if !validBearerToken(r.Header.Get("Authorization"), s.cfg.AccessToken) {
+		if !validBearerToken(r.Header.Get("Authorization"), token) {
 			if s.oidc != nil {
 				w.Header().Set("X-Masterdale-OIDC", "enabled")
 			}
@@ -235,6 +238,8 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("/v1/git/audit", s.handleGitAudit)
 	s.mux.HandleFunc("/v1/exec", s.handleExec)
 	s.mux.HandleFunc("/v1/linuxmice/", s.handleLinuxMice)
+	s.mux.HandleFunc("/v1/vault", s.handleVault)
+	s.mux.HandleFunc("/v1/vault/", s.handleVault)
 	s.mux.HandleFunc("/mcp", s.handleMCP)
 }
 

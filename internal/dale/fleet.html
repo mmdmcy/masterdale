@@ -43,6 +43,11 @@
     .tabs button.active { border-color: var(--accent); color: var(--accent); }
     .toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
     .toolbar input[type=search] { min-width: 0; flex: 1 1 180px; }
+    .vault-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 8px; }
+    .vault-form input, .vault-form textarea { font: inherit; padding: 6px 10px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--bg); color: var(--text); width: 100%; }
+    .vault-form textarea { grid-column: 1 / -1; min-height: 3em; }
+    .vault-form label { display: grid; gap: 4px; font-size: 0.9em; color: var(--muted); }
+    .vault-switch button.active { border-color: var(--accent); color: var(--accent); }
     .meta { color: var(--muted); font-size: 12px; margin-bottom: 10px; word-break: break-word; }
     code, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
     .cards { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
@@ -177,6 +182,7 @@
       <button data-tab="selfhost" type="button">Self-hosting</button>
       <button data-tab="backups" type="button">Backups</button>
       <button data-tab="org" type="button">Organization</button>
+      <button data-tab="vault" type="button">Vault</button>
       <button data-tab="rescue" type="button">Health</button>
     </div>
     <div class="toolbar" id="toolbar">
@@ -268,6 +274,7 @@
     function viewName() { return { repos: "map", folders: "map", move: "devices", setup: "devices" }[state.tab] || state.tab; }
 
     async function load(force) {
+      if (state.tab === "vault") { loadVault(); return; }
       const name = viewName();
       let path = `/v1/linuxmice/${name}`;
       const params = new URLSearchParams();
@@ -294,6 +301,7 @@
     }
 
     function render() {
+      if (state.tab === "vault") { renderVault(); return; }
       const name = viewName();
       const view = state.tab === "selfhost" ? state.views[`selfhost:${state.selfhostDevice}`] : state.views[name];
       $("verdict").style.display = state.tab === "repos" || state.tab === "folders" ? "" : "none";
@@ -780,6 +788,105 @@
     }
     $("confirmYes").addEventListener("click", () => { $("confirmDialog").close(); const run = pendingConfirm; pendingConfirm = null; if (run) run(); });
     $("confirmNo").addEventListener("click", () => { pendingConfirm = null; $("confirmDialog").close(); });
+
+
+    // Vault (LinuxMice ADR 0064): values never go into the page; Copy puts
+    // one on the clipboard for 30 s, and agents' requests are answered here
+    // or on the phone.
+    state.vault = { data: null, which: "personal", message: "", timer: null };
+    async function loadVault() {
+      $("meta").innerHTML = "<code>$ lmice vault</code>";
+      try { state.vault.data = await api("/v1/vault"); } catch (error) { state.vault.data = null; state.vault.message = `failed: ${error.message}`; }
+      renderVault();
+      clearTimeout(state.vault.timer);
+      state.vault.timer = setTimeout(() => { if (state.tab === "vault" && !document.activeElement?.closest?.(".vault-form")) loadVault(); }, 5000);
+    }
+    function renderVault() {
+      const v = state.vault, d = v.data;
+      ["verdict", "search", "hostDevice"].forEach((id) => { $(id).style.display = "none"; });
+      $("cards").innerHTML = "";
+      if (!d) { $("view").innerHTML = `<div class="empty">${esc(v.message || "loading the vault…")}</div>`; return; }
+      if (!d.ready) { $("view").innerHTML = `<div class="empty">${esc(d.detail)}</div>`; return; }
+      const canChange = state.caps?.actions_enabled;
+      const when = (t) => new Date(t * 1000).toLocaleTimeString();
+      const requests = d.requests.map((r) => `<div class="panel">${pill("warn")} <b>${esc(r.via)}</b> wants <b>${esc(r.secret)}</b> for <code>${esc(r.purpose)}</code> <span class="muted">· ${esc(when(r.at))}</span><div class="toolbar">${["allow", "hour", "deny"].map((a) => `<button data-vault-decide="${a}" data-id="${esc(r.id)}" data-code="${esc(r.code)}" type="button" ${a === "deny" ? 'class="danger"' : ""}>${{ allow: "Allow once", hour: "Allow 1 hour", deny: "Deny" }[a]}</button>`).join("")}</div></div>`).join("");
+      const counts = Object.fromEntries(d.vaults.map((name) => [name, d.entries.filter((e) => e.vault === name).length]));
+      const rows = d.entries.filter((e) => e.vault === v.which).map((e) => `<tr><td><b>${esc(e.name)}</b><br><span class="muted">${esc(e.kind)}${e.changed ? ` · changed ${esc(e.changed)}` : ""}</span></td><td>${esc(e.user || "-")}</td><td class="detail">${esc((e.domains || []).join(" ") || "-")}</td><td class="detail">${(e.targets || []).length ? e.targets.map((t) => `${esc(t.device)}:${esc(t.file)}`).join("<br>") : "-"}</td><td><div class="toolbar"><button data-vault-copy="${esc(e.name)}" type="button">Copy password</button>${(e.targets || []).length ? `<button data-vault-rotate="${esc(e.name)}" type="button" ${canChange ? "" : "disabled"}>Rotate…</button>` : ""}<button data-vault-remove="${esc(e.name)}" type="button" ${canChange ? "" : "disabled"}>Remove…</button></div></td></tr>`).join("");
+      $("view").innerHTML = requests +
+        `<div class="toolbar vault-switch">${d.vaults.map((name) => `<button data-vault-which="${esc(name)}" class="${name === v.which ? "active" : ""}" type="button">${esc(name)} (${counts[name]})</button>`).join("")}<span class="muted">${esc(v.message)}</span></div>` +
+        (rows ? `<div class="scroll"><table><thead><tr><th>Name</th><th>User</th><th>Sites</th><th>Copied to</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>` : `<div class="empty">The ${esc(v.which)} vault is empty.</div>`) +
+        `<div class="panel"><h3>Add to the ${esc(v.which)} vault</h3><form class="vault-form" id="vaultForm" autocomplete="off">
+          <label>Name <input name="name" required pattern="[A-Za-z0-9][A-Za-z0-9._-]{0,63}" placeholder="github"></label>
+          <label>User or email <input name="user" autocomplete="off" placeholder="you@example.com"></label>
+          <label>Password <input name="password" type="password" autocomplete="new-password"></label>
+          <label>Sites <input name="domains" placeholder="github.com, gist.github.com"></label>
+          <label>One-time code secret (optional) <input name="totp" type="password" autocomplete="off"></label>
+          <textarea name="note" placeholder="Note (optional, encrypted)"></textarea>
+          <div class="toolbar"><button type="submit" ${canChange ? "" : "disabled"}>Save</button><button data-vault-generate type="button">Generate password</button></div>
+        </form></div>` +
+        `<div class="panel"><p>Three vaults with their own keys: personal, katteke and work never open each other. Every secret is also readable with the backup key on the Mac. Agents use a secret by name (<code>lmice vault run</code>) and never see it; their use waits for your Allow here or on your phone. A secret's "copied to" places are rewritten by Rotate (for example the Masterdale token). <code>lmice vault</code></p></div>`;
+      const form = $("vaultForm");
+      form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const f = new FormData(form);
+        const body = { vault: v.which, name: f.get("name").trim(), user: f.get("user").trim(), password: f.get("password"), totp: f.get("totp"), note: f.get("note"), domains: f.get("domains").split(/[\s,]+/).filter(Boolean) };
+        v.message = "saving…"; renderVaultMessage();
+        try {
+          await api("/v1/vault/add", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+          form.reset();
+          v.message = `${body.name} saved`;
+        } catch (error) { v.message = `failed: ${error.message}`; }
+        loadVault();
+      });
+    }
+    function renderVaultMessage() { const span = document.querySelector(".vault-switch .muted"); if (span) span.textContent = state.vault.message; }
+    async function vaultAction(path, body) {
+      return api(`/v1/vault/${path}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    }
+    $("view").addEventListener("click", async (event) => {
+      if (state.tab !== "vault") return;
+      const v = state.vault, b = event.target.closest("button");
+      if (!b) return;
+      if (b.dataset.vaultWhich) { v.which = b.dataset.vaultWhich; v.message = ""; renderVault(); return; }
+      if (b.hasAttribute("data-vault-generate")) {
+        const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789-_.!";
+        const random = crypto.getRandomValues(new Uint32Array(22));
+        $("vaultForm").elements.password.value = Array.from(random, (n) => alphabet[n % alphabet.length]).join("");
+        $("vaultForm").elements.password.type = "password";
+        v.message = "generated a 22-character password (hidden; Save stores it)"; renderVaultMessage();
+        return;
+      }
+      if (b.dataset.vaultCopy) {
+        try {
+          const { value } = await vaultAction("reveal", { vault: v.which, name: b.dataset.vaultCopy });
+          await navigator.clipboard.writeText(value);
+          v.message = `copied ${b.dataset.vaultCopy}; the clipboard is cleared after 30 s (or when you come back to this page)`;
+          // Browsers only write the clipboard while the page has focus: if
+          // the timed clear can't, it happens on the next focus.
+          setTimeout(() => navigator.clipboard.writeText("").catch(() => window.addEventListener("focus", () => navigator.clipboard.writeText("").catch(() => {}), { once: true })), 30000);
+        } catch (error) { v.message = `failed: ${error.message}`; }
+        renderVaultMessage();
+        return;
+      }
+      if (b.dataset.vaultDecide) {
+        try { await vaultAction("decide", { id: b.dataset.id, code: b.dataset.code, answer: b.dataset.vaultDecide }); v.message = "answered"; } catch (error) { v.message = `failed: ${error.message}`; }
+        loadVault();
+        return;
+      }
+      const name = b.dataset.vaultRotate || b.dataset.vaultRemove;
+      if (name) {
+        const rotate = !!b.dataset.vaultRotate;
+        askConfirm(`lmice vault ${rotate ? "rotate" : "remove"} ${v.which}/${name}`, rotate ? "A new random value replaces the old one in the vault and in every place it is copied to; old files are kept as .bak-rotate-*." : "The secret moves to the vault's .removed/ folder; nothing is deleted.", async () => {
+          v.message = rotate ? "rotating…" : "removing…"; renderVaultMessage();
+          try {
+            const result = await vaultAction(rotate ? "rotate" : "remove", { vault: v.which, name });
+            const failed = (result.targets || []).filter((t) => !t.ok);
+            v.message = failed.length ? `rotated, but not written to: ${failed.map((t) => `${t.device} (${t.detail})`).join(", ")}` : rotate ? `${name} rotated everywhere` : `${name} removed`;
+          } catch (error) { v.message = `failed: ${error.message}`; }
+          loadVault();
+        });
+      }
+    });
 
     $("tabs").addEventListener("click", (event) => {
       const button = event.target.closest("button[data-tab]");

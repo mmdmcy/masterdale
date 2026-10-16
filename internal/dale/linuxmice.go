@@ -483,7 +483,7 @@ func RunLinuxMiceView(ctx context.Context, name string, args []string, timeout t
 
 // runLinuxMiceWith runs one lmice command with a binary chosen by the caller,
 // so a background job keeps the binary it was started with.
-func runLinuxMiceWith(ctx context.Context, binary, name string, args []string, timeout time.Duration) LinuxMiceView {
+func runLinuxMiceWith(ctx context.Context, binary, name string, args []string, timeout time.Duration, changes ...bool) LinuxMiceView {
 	view := LinuxMiceView{View: name, GeneratedAt: time.Now().UTC().Format(time.RFC3339)}
 	if binary == "" {
 		view.Hint = "install lmice (LinuxMice) into ~/.local/bin to see fleet workspace views here"
@@ -494,9 +494,9 @@ func runLinuxMiceWith(ctx context.Context, binary, name string, args []string, t
 	cctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	start := time.Now()
-	cmd := exec.CommandContext(cctx, binary, args...)
-	// lmice's change log records who started a change.
-	cmd.Env = append(os.Environ(), "LMICE_VIA=masterdale")
+	// Changes run through the user's systemd manager when dale is sandboxed
+	// (lmiceCommand); read-only views run directly.
+	cmd := lmiceCommand(cctx, binary, args, len(changes) > 0 && changes[0])
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
@@ -601,7 +601,7 @@ func (c *linuxmiceCache) start(kind string, args []string, changes bool) (LinuxM
 	binary := LinuxMiceBinary()
 	go func() {
 		// Changes must finish even if the browser goes away.
-		view := runLinuxMiceWith(context.Background(), binary, kind, args, timeout)
+		view := runLinuxMiceWith(context.Background(), binary, kind, args, timeout, changes)
 		c.mu.Lock()
 		defer c.mu.Unlock()
 		job.View = view
