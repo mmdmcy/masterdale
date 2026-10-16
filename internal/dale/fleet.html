@@ -205,6 +205,7 @@
     <button data-tab="hardware" type="button">Hardware</button>
     <button data-tab="compare" type="button">Compare</button>
     <button data-tab="fleetfile" type="button">Fleet file</button>
+    <button data-tab="modules" type="button">Modules</button>
     <button data-tab="rescue" type="button">Recovery</button>
     <div class="group">Your work</div>
     <button data-tab="repos" type="button">Repositories</button>
@@ -353,7 +354,7 @@
         $("view").innerHTML = `<div class="empty">${esc(view?.error || view?.hint || "No data")}</div>`;
         return;
       }
-      ({ attention: renderAttention, repos: renderRepos, folders: renderFolders, devices: renderDevices, move: renderMove, upkeep: renderUpkeep, agents: renderAgents, projects: renderProjects, tools: renderTools, setup: renderSetup, integrations: renderIntegrations, selfhost: renderSelfhost, backups: renderBackups, https: renderHttps, hardware: renderHardware, fleetfile: renderFleetFile, org: renderOrg, rescue: renderRescue })[state.tab](view.data);
+      ({ attention: renderAttention, repos: renderRepos, folders: renderFolders, devices: renderDevices, move: renderMove, upkeep: renderUpkeep, agents: renderAgents, projects: renderProjects, tools: renderTools, setup: renderSetup, integrations: renderIntegrations, selfhost: renderSelfhost, backups: renderBackups, https: renderHttps, hardware: renderHardware, fleetfile: renderFleetFile, modules: renderModules, org: renderOrg, rescue: renderRescue })[state.tab](view.data);
     }
 
     function renderAttention(data) {
@@ -756,6 +757,27 @@
       $("cmpResult").innerHTML = `<div class="scroll"><table><thead><tr><th>Category</th><th>${esc(d.a)}</th><th>${esc(d.b)}</th><th>Both</th><th>Alike</th></tr></thead><tbody>${rows}</tbody></table></div>${details}<div class="panel"><p><code>lmice inventory compare ${esc(d.a)} ${esc(d.b)}</code></p></div>`;
     }
 
+    // Pages that belong to a module; they hide when it is off here.
+    const MODULE_TABS = { workspace: ["repos", "folders", "move", "projects"], agents: ["agents"], org: ["org"], inventory: ["hardware", "compare"], servers: ["selfhost"], backups: ["backups"], https: ["https"], vault: ["vault"], integrations: ["integrations"] };
+    async function hideOffModules() {
+      try {
+        const view = await api("/v1/linuxmice/modules");
+        for (const m of view.data?.modules || []) {
+          for (const tab of MODULE_TABS[m.id] || []) {
+            const b = document.querySelector(`[data-tab="${tab}"]`);
+            if (b) b.hidden = !m.on;
+          }
+        }
+      } catch (_) { /* an older lmice has no modules: show everything */ }
+    }
+
+    function renderModules(data) {
+      const canChange = state.caps?.actions_enabled;
+      $("cards").innerHTML = `<div class="card"><strong>${esc(data.detail)}</strong><span>core: ${data.core.map(esc).join(" ")}</span></div>`;
+      const rows = data.modules.map((m) => `<tr><td><b>${esc(m.id)}</b><br><span class="muted">${esc(m.name)}</span></td><td>${esc(m.about)}<br><span class="muted">${m.commands.map((c) => `lmice ${esc(c)}`).join(" · ")}${m.timer ? ` · timer lmice-${esc(m.timer)}` : ""}</span></td><td>${pill(m.on ? "ok" : "off")}</td><td><button data-module="${esc(m.id)}" data-module-on="${m.on ? "0" : "1"}" type="button" ${canChange ? "" : "disabled"}>${m.on ? "Switch off…" : "Switch on"}</button></td></tr>`).join("");
+      $("view").innerHTML = `<div class="scroll"><table><thead><tr><th>Module</th><th>What it does</th><th>Here</th><th></th></tr></thead><tbody>${rows}</tbody></table></div><div class="panel"><p><code>lmice modules</code> · <code>lmice modules off ID</code> · <code>lmice modules on ID</code>. The choice is per machine; the fleet file keeps it.</p></div>`;
+    }
+
     function renderFleetFile(data) {
       const canChange = state.caps?.actions_enabled;
       const list = (label, items) => items?.length ? `<tr><th>${label}</th><td>${items.map(esc).join(", ")}</td></tr>` : "";
@@ -1058,6 +1080,18 @@
       await loadVault(true); renderVault();
     });
     $("view").addEventListener("click", (event) => {
+      if (state.tab !== "modules") return;
+      const b = event.target.closest("button[data-module]");
+      if (!b) return;
+      const id = b.dataset.module, turnOn = b.dataset.moduleOn === "1";
+      const run = async () => {
+        const job = await startJob({ kind: turnOn ? "module-on" : "module-off", id });
+        $("meta").textContent = job.state === "done" ? (turnOn ? `${id} is on` : `${id} is off`) : `failed: ${job.view.error || ""}`;
+        state.views.modules = null; load(true); hideOffModules();
+      };
+      if (turnOn) run(); else askConfirm(`lmice modules off ${id}`, "Its commands, checks, timer and pages are hidden on this machine. Nothing is deleted; switch it on again any time.", run);
+    });
+    $("view").addEventListener("click", (event) => {
       if (state.tab !== "fleetfile") return;
       const b = event.target.closest("button");
       if (!b) return;
@@ -1148,6 +1182,7 @@
       projects: ["Projects", "Your projects and where each stands. Retired ones can be tidied away."],
       selfhost: ["Self-hosting", "The services you host yourself, and whether they're up."],
       integrations: ["Integrations", "Optional connections LinuxMice uses on each device. Turn them on or off."],
+      modules: ["Modules", "LinuxMice is a small core plus building blocks. Switch a block off and its commands, checks, timer and pages disappear on this machine; nothing is deleted."],
       fleetfile: ["Fleet file", "Every machine, what it is for and what it runs, in one file. With it and last night's backup, any of them can be rebuilt on a fresh machine."],
       compare: ["Compare", "What is installed and running on two machines, side by side: how alike they are, what only one has, and where versions differ."],
       hardware: ["Hardware", "What each machine is, what it can still take, and what it costs to keep running, next to machines you could buy."],
@@ -1374,6 +1409,7 @@
 
     (async () => {
       try { state.caps = await api("/v1/linuxmice/capabilities"); } catch (_) { state.caps = null; }
+      hideOffModules();
       api("/v1/linuxmice/devices").then((view) => { state.views.devices = view; }).catch(() => {});
       api("/v1/linuxmice/attention").then((view) => { state.views.attention = state.views.attention || view; showAttentionCount(view.data); }).catch(() => {});
       setTab(location.hash.slice(1) || "attention", false);

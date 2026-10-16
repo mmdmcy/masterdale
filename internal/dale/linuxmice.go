@@ -62,6 +62,7 @@ var linuxmiceViews = map[string][]string{
 	"https":        {"https", "--format", "json"},
 	"hardware":     {"hardware", "compare", "--format", "json"},
 	"fleetfile":    {"fleet", "file", "--format", "json"},
+	"modules":      {"modules", "--format", "json"},
 	"fleetdiff":    {"fleet", "diff", "--format", "json"},
 	// Not served as a view: names this node for the page.
 	"integrations-local": {"integrations", "--format", "json"},
@@ -441,6 +442,11 @@ func linuxmiceJobArgs(req LinuxMiceJobRequest) ([]string, bool, error) {
 		return append(args, "--yes", "--format", "json"), true, nil
 	case "https-apply":
 		return []string{"--yes", "https", "apply"}, true, nil
+	case "module-on", "module-off":
+		if !linuxmiceIDPattern.MatchString(req.ID) {
+			return nil, false, errors.New("pick a module")
+		}
+		return []string{"modules", strings.TrimPrefix(req.Kind, "module-"), req.ID}, true, nil
 	case "fleet-capture":
 		return []string{"--yes", "fleet", "capture", "--commit"}, true, nil
 	case "fleet-apply":

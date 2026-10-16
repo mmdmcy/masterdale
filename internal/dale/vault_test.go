@@ -4,6 +4,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -108,5 +109,15 @@ func TestFleetJobsTakeOnlyAPlainDevice(t *testing.T) {
 	}
 	if args, _, err := linuxmiceJobArgs(LinuxMiceJobRequest{Kind: "fleet-capture"}); err != nil || args[len(args)-1] != "--commit" {
 		t.Fatalf("fleet-capture: %v %v", args, err)
+	}
+}
+
+func TestModuleJobsTakeOnlyAPlainID(t *testing.T) {
+	args, changes, err := linuxmiceJobArgs(LinuxMiceJobRequest{Kind: "module-off", ID: "vault"})
+	if err != nil || !changes || strings.Join(args, " ") != "modules off vault" {
+		t.Fatalf("module-off: %v %v %v", args, changes, err)
+	}
+	if _, _, err := linuxmiceJobArgs(LinuxMiceJobRequest{Kind: "module-on", ID: "--yes"}); err == nil {
+		t.Fatal("a flag must not pass as a module")
 	}
 }
