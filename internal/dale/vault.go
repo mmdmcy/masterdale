@@ -216,6 +216,86 @@ func (s *Server) handleVault(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		s.vaultChange(w, r, []string{"--yes", "vault", action, spec, "--format", "json"}, nil)
+	case "code":
+		var ref vaultRef
+		if err := json.NewDecoder(body).Decode(&ref); err != nil {
+			writeError(w, http.StatusBadRequest, errors.New("invalid request"))
+			return
+		}
+		ref.Field = ""
+		spec, err := ref.spec()
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err)
+			return
+		}
+		out, errOut, err := runLmice(r.Context(), []string{"vault", "code", spec}, nil, true, 30*time.Second)
+		if err != nil {
+			writeError(w, http.StatusBadGateway, lmiceError(errOut, err))
+			return
+		}
+		w.Header().Set("Cache-Control", "no-store")
+		writeJSON(w, http.StatusOK, map[string]string{"value": strings.TrimSpace(string(out))})
+	case "ask":
+		var req struct {
+			vaultRef
+			On bool `json:"on"`
+		}
+		if err := json.NewDecoder(body).Decode(&req); err != nil {
+			writeError(w, http.StatusBadRequest, errors.New("invalid request"))
+			return
+		}
+		req.Field = ""
+		spec, err := req.vaultRef.spec()
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err)
+			return
+		}
+		state := "off"
+		if req.On {
+			state = "on"
+		}
+		s.vaultChange(w, r, []string{"--yes", "vault", "ask", spec, state}, nil)
+	case "target":
+		var req struct {
+			vaultRef
+			Device  string `json:"device"`
+			File    string `json:"file"`
+			Key     string `json:"key"`
+			Restart string `json:"restart"`
+			Remove  bool   `json:"remove"`
+		}
+		if err := json.NewDecoder(body).Decode(&req); err != nil {
+			writeError(w, http.StatusBadRequest, errors.New("invalid request"))
+			return
+		}
+		req.Field = ""
+		spec, err := req.vaultRef.spec()
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err)
+			return
+		}
+		if !linuxmiceDevicePattern.MatchString(req.Device) || len(req.File) > 512 || !(strings.HasPrefix(req.File, "~/") || strings.HasPrefix(req.File, "/")) || strings.ContainsAny(req.File, ":\x00\r\n'\"") {
+			writeError(w, http.StatusBadRequest, errors.New("pick a device and a file starting with ~/ or /"))
+			return
+		}
+		args := []string{"--yes", "vault", "target", spec}
+		if req.Remove {
+			args = append(args, req.Device+":"+req.File, "--remove")
+		} else {
+			if !regexp.MustCompile(`^[A-Z][A-Z0-9_]{0,63}$`).MatchString(req.Key) {
+				writeError(w, http.StatusBadRequest, errors.New("the key is the variable name in the file, like DALE_TOKEN"))
+				return
+			}
+			args = append(args, req.Device+":"+req.File+":"+req.Key)
+			if restart := strings.TrimSpace(req.Restart); restart != "" {
+				if len(restart) > 300 || strings.ContainsAny(restart, "\x00\r\n") {
+					writeError(w, http.StatusBadRequest, errors.New("the restart command is one line"))
+					return
+				}
+				args = append(args, "--restart", restart)
+			}
+		}
+		s.vaultChange(w, r, args, nil)
 	case "reveal":
 		var ref vaultRef
 		if err := json.NewDecoder(body).Decode(&ref); err != nil {
