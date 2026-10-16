@@ -79,3 +79,21 @@ func TestVaultActionsNeedASignedInPersonEvenLocally(t *testing.T) {
 		}
 	}
 }
+
+func TestHTTPSJobsTakeOnlyPlainNamesPortsAndPrivateUpstreams(t *testing.T) {
+	good := LinuxMiceJobRequest{Kind: "https-add", ID: "dale", A: "7443", B: "http://127.0.0.1:7345"}
+	if args, changes, err := linuxmiceJobArgs(good); err != nil || !changes || args[len(args)-1] != "http://127.0.0.1:7345" {
+		t.Fatalf("good request: %v %v %v", args, changes, err)
+	}
+	for _, bad := range []LinuxMiceJobRequest{
+		{Kind: "https-add", ID: "dale", A: "80", B: "http://127.0.0.1:7345"},
+		{Kind: "https-add", ID: "Dale", A: "7443", B: "http://127.0.0.1:7345"},
+		{Kind: "https-add", ID: "dale", A: "7443", B: "http://example.com:80"},
+		{Kind: "https-add", ID: "dale", A: "7443", B: "http://127.0.0.1:7345; rm -rf /"},
+		{Kind: "https-remove", ID: "--yes"},
+	} {
+		if _, _, err := linuxmiceJobArgs(bad); err == nil {
+			t.Fatalf("%+v should be refused", bad)
+		}
+	}
+}

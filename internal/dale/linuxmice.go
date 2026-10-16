@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -58,6 +59,7 @@ var linuxmiceViews = map[string][]string{
 	"org":          {"org", "--format", "json"},
 	"changes":      {"changes", "--format", "json"},
 	"attention":    {"attention", "--format", "json"},
+	"https":        {"https", "--format", "json"},
 	// Not served as a view: names this node for the page.
 	"integrations-local": {"integrations", "--format", "json"},
 }
@@ -67,6 +69,7 @@ var (
 	linuxmiceDevicePattern   = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`)
 	linuxmiceLocationPattern = regexp.MustCompile(`^~/[^\x00-\x1f]+$`)
 	linuxmiceIDPattern       = regexp.MustCompile(`^[a-z][a-z0-9-]{0,31}$`)
+	linuxmiceUpstreamPattern = regexp.MustCompile(`^http://[0-9]{1,3}(\.[0-9]{1,3}){3}:[0-9]{1,5}$`)
 )
 
 type LinuxMiceView struct {
@@ -426,6 +429,19 @@ func linuxmiceJobArgs(req LinuxMiceJobRequest) ([]string, bool, error) {
 			return append(args, "--format", "json"), false, nil
 		}
 		return append(args, "--yes", "--format", "json"), true, nil
+	case "https-apply":
+		return []string{"--yes", "https", "apply"}, true, nil
+	case "https-add":
+		port, err := strconv.Atoi(req.A)
+		if !linuxmiceIDPattern.MatchString(req.ID) || err != nil || port < 1024 || port > 65535 || !linuxmiceUpstreamPattern.MatchString(req.B) {
+			return nil, false, errors.New("give a name, a port of 1024 or above and http://PRIVATE-IP:PORT")
+		}
+		return []string{"--yes", "https", "add", req.ID, "--port", strconv.Itoa(port), "--to", req.B}, true, nil
+	case "https-remove":
+		if !linuxmiceIDPattern.MatchString(req.ID) {
+			return nil, false, errors.New("pick a site")
+		}
+		return []string{"--yes", "https", "remove", req.ID}, true, nil
 	case "integration-enable", "integration-disable":
 		if !linuxmiceIDPattern.MatchString(req.ID) || !linuxmiceDevicePattern.MatchString(req.Device) {
 			return nil, false, errors.New("pick an integration id and a device")
