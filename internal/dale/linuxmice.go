@@ -285,6 +285,20 @@ func (s *Server) handleLinuxMice(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		args = []string{"services", "logs", unit, "--device", device, "--lines", "200", "--format", "json"}
+	case "identity":
+		// The sign-in service's database needs write access even to read
+		// (SQLite's journal), which this sandboxed service lacks: run it
+		// through the user manager like a change, but it changes nothing.
+		started := time.Now()
+		out, errOut, err := runLmice(r.Context(), []string{"identity", "--format", "json"}, nil, true, time.Minute)
+		view := LinuxMiceView{View: name, Available: LinuxMiceBinary() != "", Command: "lmice identity --format json", GeneratedAt: time.Now().UTC().Format(time.RFC3339), DurationMS: time.Since(started).Milliseconds()}
+		if trimmed := bytes.TrimSpace(out); json.Valid(trimmed) && len(trimmed) > 0 {
+			view.Data = json.RawMessage(trimmed)
+		} else {
+			view.Error = lmiceError(errOut, err).Error()
+		}
+		writeJSON(w, http.StatusOK, view)
+		return
 	case "remove-plan":
 		// Only the plan: without --yes, lmice remove changes nothing.
 		program := query.Get("name")
