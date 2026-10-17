@@ -238,15 +238,15 @@ func (s *Server) handleLinuxMice(w http.ResponseWriter, r *http.Request) {
 		}
 		args = append(args, "--format", "json")
 	case "services", "ports", "display", "windows":
-		device := query.Get("device")
-		if device == "" {
-			device = "lawnmower"
+		// Without a device, lmice answers for the machine Masterdale runs on.
+		args = []string{name, "--format", "json"}
+		if device := query.Get("device"); device != "" {
+			if !linuxmiceDevicePattern.MatchString(device) {
+				writeError(w, http.StatusBadRequest, errors.New("invalid device"))
+				return
+			}
+			args = []string{name, "--device", device, "--format", "json"}
 		}
-		if !linuxmiceDevicePattern.MatchString(device) {
-			writeError(w, http.StatusBadRequest, errors.New("invalid device"))
-			return
-		}
-		args = []string{name, "--device", device, "--format", "json"}
 	case "logs":
 		device, unit := query.Get("device"), query.Get("name")
 		if !linuxmiceDevicePattern.MatchString(device) || !linuxmiceServicePattern.MatchString(unit) {

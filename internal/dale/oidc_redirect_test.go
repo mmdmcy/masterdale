@@ -7,14 +7,14 @@ func TestSignInReturnsToTheAddressItStartedAt(t *testing.T) {
 	t.Setenv("DALE_OIDC_CLIENT_ID", "masterdale")
 	t.Setenv("DALE_OIDC_CLIENT_SECRET", "secret")
 	t.Setenv("DALE_OIDC_REDIRECT_URL", "https://a.example.test:7346/auth/oidc/callback")
-	t.Setenv("DALE_OIDC_EXTRA_REDIRECT_URLS", " https://b.katteke.internal:7443/auth/oidc/callback")
+	t.Setenv("DALE_OIDC_EXTRA_REDIRECT_URLS", " https://b.example.internal:7443/auth/oidc/callback")
 	t.Setenv("DALE_OIDC_ALLOWED_SUBJECTS", "someone")
 	config, err := loadOIDCConfig()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := config.redirectFor("b.katteke.internal:7443"); got != "https://b.katteke.internal:7443/auth/oidc/callback" {
-		t.Fatalf("katteke address: %s", got)
+	if got := config.redirectFor("b.example.internal:7443"); got != "https://b.example.internal:7443/auth/oidc/callback" {
+		t.Fatalf("example address: %s", got)
 	}
 	if got := config.redirectFor("elsewhere:1"); got != config.RedirectURL || got != "https://a.example.test:7346/auth/oidc/callback" {
 		t.Fatalf("fallback: %s", got)

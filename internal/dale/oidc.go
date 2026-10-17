@@ -32,7 +32,7 @@ type OIDCConfig struct {
 	ClientSecret string
 	// RedirectURL is the first of DALE_OIDC_REDIRECT_URL's comma-separated
 	// callbacks; RedirectURLs holds them all, one per address Masterdale is
-	// reached at (its Tailscale and its katteke.internal address, ADR 0066).
+	// reached at (for example a tailnet name and an internal name).
 	RedirectURL     string
 	RedirectURLs    []string
 	AllowedSubjects map[string]struct{}
@@ -94,7 +94,7 @@ func loadOIDCConfig() (*OIDCConfig, error) {
 		return nil, err
 	}
 	// DALE_OIDC_EXTRA_REDIRECT_URLS adds callbacks outside the secret .env
-	// (a systemd drop-in), e.g. Masterdale's katteke.internal address.
+	// (a systemd drop-in), e.g. Masterdale's internal name.
 	var redirects []string
 	for _, redirect := range strings.Split(values[3]+","+os.Getenv("DALE_OIDC_EXTRA_REDIRECT_URLS"), ",") {
 		if redirect = strings.TrimSpace(redirect); redirect == "" {

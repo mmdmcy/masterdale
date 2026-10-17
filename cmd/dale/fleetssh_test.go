@@ -16,7 +16,7 @@ func TestMarshalOpenSSHPrivateKeyIsReadableBySSHKeygen(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	comment := "sleep@lawnmower-fleet"
+	comment := "sleep@server-fleet"
 	pemBytes := encodeOpenSSHPrivateKeyPEM(pub, priv, comment)
 
 	path := filepath.Join(t.TempDir(), "unit_fleet_ed25519")
@@ -46,7 +46,7 @@ func TestSSHConfigLinesHaveAlias(t *testing.T) {
 			t.Fatalf("expected alias %q to be present", alias)
 		}
 	}
-	for _, alias := range []string{"nitori", "a34ht70", "mini-nested"} {
+	for _, alias := range []string{"laptop", "a34ht70", "mini-nested"} {
 		if sshConfigLinesHaveAlias(config, alias) {
 			t.Fatalf("expected alias %q to be absent", alias)
 		}

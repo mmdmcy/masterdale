@@ -100,8 +100,8 @@ func TestHTTPSJobsTakeOnlyPlainNamesPortsAndPrivateUpstreams(t *testing.T) {
 }
 
 func TestFleetJobsTakeOnlyAPlainDevice(t *testing.T) {
-	args, changes, err := linuxmiceJobArgs(LinuxMiceJobRequest{Kind: "fleet-apply", Device: "lawnmower"})
-	if err != nil || !changes || args[len(args)-1] != "lawnmower" {
+	args, changes, err := linuxmiceJobArgs(LinuxMiceJobRequest{Kind: "fleet-apply", Device: "server"})
+	if err != nil || !changes || args[len(args)-1] != "server" {
 		t.Fatalf("fleet-apply: %v %v %v", args, changes, err)
 	}
 	if _, _, err := linuxmiceJobArgs(LinuxMiceJobRequest{Kind: "fleet-apply", Device: "--as"}); err == nil {
@@ -123,13 +123,13 @@ func TestModuleJobsTakeOnlyAPlainID(t *testing.T) {
 }
 
 func TestServiceRestartTakesOnlyPlainNames(t *testing.T) {
-	args, changes, err := linuxmiceJobArgs(LinuxMiceJobRequest{Kind: "service-restart", ID: "selfhost-ntfy", Device: "lawnmower"})
-	if err != nil || !changes || strings.Join(args, " ") != "--yes services restart selfhost-ntfy --device lawnmower" {
+	args, changes, err := linuxmiceJobArgs(LinuxMiceJobRequest{Kind: "service-restart", ID: "selfhost-ntfy", Device: "server"})
+	if err != nil || !changes || strings.Join(args, " ") != "--yes services restart selfhost-ntfy --device server" {
 		t.Fatalf("service-restart: %v %v %v", args, changes, err)
 	}
 	for _, bad := range []LinuxMiceJobRequest{
-		{Kind: "service-restart", ID: "--all", Device: "lawnmower"},
-		{Kind: "service-restart", ID: "x; reboot", Device: "lawnmower"},
+		{Kind: "service-restart", ID: "--all", Device: "server"},
+		{Kind: "service-restart", ID: "x; reboot", Device: "server"},
 		{Kind: "service-restart", ID: "ntfy", Device: "-oProxyCommand"},
 	} {
 		if _, _, err := linuxmiceJobArgs(bad); err == nil {
@@ -139,8 +139,8 @@ func TestServiceRestartTakesOnlyPlainNames(t *testing.T) {
 }
 
 func TestDisplayJobsTakeOnlyADevice(t *testing.T) {
-	args, changes, err := linuxmiceJobArgs(LinuxMiceJobRequest{Kind: "display-on", Device: "lawnmower"})
-	if err != nil || !changes || strings.Join(args, " ") != "--yes display virtual on --device lawnmower" {
+	args, changes, err := linuxmiceJobArgs(LinuxMiceJobRequest{Kind: "display-on", Device: "server"})
+	if err != nil || !changes || strings.Join(args, " ") != "--yes display virtual on --device server" {
 		t.Fatalf("display-on: %v %v %v", args, changes, err)
 	}
 	if _, _, err := linuxmiceJobArgs(LinuxMiceJobRequest{Kind: "display-off", Device: "-oProxyCommand=x"}); err == nil {

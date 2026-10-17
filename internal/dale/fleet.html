@@ -223,7 +223,7 @@
     <button data-tab="backups" type="button">Backups</button>
     <button data-tab="https" type="button">HTTPS</button>
     <button data-tab="agents" type="button">Agents</button>
-    <div class="group">Katteke</div>
+    <div class="group">Organization</div>
     <button data-tab="org" type="button">Organization</button>
     <button data-tab="vault" type="button">Vault</button>
   </nav>
@@ -459,7 +459,7 @@
           <ol>
             <li>On the new Linux device: <code>sudo apt install openssh-server</code> and join the tailnet (<code>curl -fsSL https://tailscale.com/install.sh | sh</code>, then <code>sudo tailscale up</code>).</li>
             <li>On any fleet device: <code>lmice fleet join NAME --target USER@ADDRESS --install-packages confirm</code></li>
-            <li>Then use <strong>Sync &amp; move</strong> here (or <code>lmice workspace carry lawnmower --to NAME --execute</code>) to move your work onto it.</li>
+            <li>Then use <strong>Sync &amp; move</strong> here (or <code>lmice workspace carry DEVICE --to NAME --execute</code>) to move your work onto it.</li>
           </ol>
         </div>`;
     }
@@ -740,12 +740,12 @@
       const age = (s) => s == null ? "none yet" : s < 172800 ? `${Math.floor(s / 3600)}h old` : `${Math.floor(s / 86400)} days old`;
       $("cards").innerHTML = `<div class="card"><strong>${esc(data.device)} ${pill(data.status)}</strong><span>${esc(data.detail)}</span></div>`;
       $("view").innerHTML = (data.pulls.length ? `<div class="scroll"><table><thead><tr><th>Backup</th><th>State</th><th>Copies</th><th>Newest</th><th>From → into</th><th>Keeps</th></tr></thead><tbody>${data.pulls.map((p) => `<tr><td>${esc(p.name)}</td><td>${pill(p.state === "pulled" ? "ok" : p.state === "stale" ? "warn" : p.state === "empty" ? "warn" : p.state)}</td><td>${p.copies} · ${mb(p.bytes)}</td><td class="detail">${esc(p.newest || "-")}<br><span class="muted">${age(p.newest_age_seconds)}</span></td><td class="detail">${esc(p.from)} → ${esc(p.to)}</td><td class="detail">${esc(p.retention)}${p.detail ? `<br>${esc(p.detail)}` : ""}</td></tr>`).join("")}</tbody></table></div>` : `<div class="empty">No backup pulls set up on this node.</div>`) +
-        `<div class="panel"><p>Backups that live on another machine (the kapotteke VPS), pulled here with a key that can only read their backup folder. Only the copies the retention keeps are fetched, each is checked against its checksum, and older ones are removed, so this stays small. ${data.scheduled ? "Pulled daily around 08:30." : "Not scheduled yet (<code>lmice backups schedule on</code>)."}</p><button data-backups-pull type="button" ${canChange ? "" : "disabled"}>Pull now…</button></div>`;
+        `<div class="panel"><p>Backups that live on another machine (a server), pulled here with a key that can only read their backup folder. Only the copies the retention keeps are fetched, each is checked against its checksum, and older ones are removed, so this stays small. ${data.scheduled ? "Pulled daily around 08:30." : "Not scheduled yet (<code>lmice backups schedule on</code>)."}</p><button data-backups-pull type="button" ${canChange ? "" : "disabled"}>Pull now…</button></div>`;
     }
 
     async function loadDeviceView(kind, force) {
-      const devices = fleetDevices().length ? fleetDevices() : ["lawnmower", "mini", "nitori"];
-      state.opsDevice = state.opsDevice || "lawnmower";
+      const devices = fleetDevices();
+      state.opsDevice = state.opsDevice || devices[0] || "";
       $("cards").innerHTML = "";
       $("view").innerHTML = `<div class="panel"><div class="toolbar"><select id="opsDevice">${devices.map((d) => `<option ${d === state.opsDevice ? "selected" : ""}>${esc(d)}</option>`).join("")}</select><button id="opsReload" type="button">Reload</button><span class="muted" id="opsMessage" role="status">loading…</span></div></div><div id="opsResult"></div>`;
       $("opsDevice").addEventListener("change", () => { state.opsDevice = $("opsDevice").value; loadDeviceView(kind, false); });
@@ -803,10 +803,10 @@
 
     function renderCompareForm() {
       const devices = fleetDevices();
-      const pick = (id, value) => `<select id="${id}">${(devices.length ? devices : ["lawnmower", "mini", "nitori"]).map((d) => `<option ${d === value ? "selected" : ""}>${esc(d)}</option>`).join("")}</select>`;
+      const pick = (id, value) => `<select id="${id}">${devices.map((d) => `<option ${d === value ? "selected" : ""}>${esc(d)}</option>`).join("")}</select>`;
       $("cards").innerHTML = "";
       $("meta").textContent = "";
-      $("view").innerHTML = `<div class="panel"><div class="toolbar">${pick("cmpA", state.cmpA || "lawnmower")}<span>with</span>${pick("cmpB", state.cmpB || "mini")}<button class="primary" id="cmpGo" type="button">Compare</button><span class="muted" id="cmpMessage" role="status"></span></div></div><div id="cmpResult"></div>`;
+      $("view").innerHTML = `<div class="panel"><div class="toolbar">${pick("cmpA", state.cmpA || devices[0] || "")}<span>with</span>${pick("cmpB", state.cmpB || devices[1] || devices[0] || "")}<button class="primary" id="cmpGo" type="button">Compare</button><span class="muted" id="cmpMessage" role="status"></span></div></div><div id="cmpResult"></div>`;
       $("cmpGo").addEventListener("click", runCompare);
       if (state.cmpResult) showCompare(state.cmpResult);
     }
@@ -869,7 +869,7 @@
         ${list("Checks", d.checks)}
       </tbody></table><div class="toolbar"><button data-fleet-apply="${esc(d.name)}" type="button" ${canChange ? "" : "disabled"}>Make ${esc(d.name)} match…</button></div></div>`).join("");
       $("view").innerHTML = `<div class="panel"><div class="toolbar"><button class="primary" data-fleet-diff type="button">Check for drift</button><button data-fleet-capture type="button" ${canChange ? "" : "disabled"}>Capture and commit now</button><span class="muted" id="fleetMessage" role="status"></span></div><div id="fleetDrift"></div></div>` + devices +
-        `<div class="panel"><p>A fresh machine becomes one of these from the Mac, which holds the backup key: <code>lmice fleet rebuild NEW-MACHINE --as lawnmower</code>. Prove it first with <code>--drill</code> on a spare machine. Every night lawnmower captures what each machine runs and commits it (<code>lmice fleet schedule on</code>).</p></div>`;
+        `<div class="panel"><p>A fresh machine becomes one of these from the device that holds the backup key: <code>lmice fleet rebuild NEW-MACHINE --as DEVICE</code>. Prove it first with <code>--drill</code> on a spare machine. Every night lawnmower captures what each machine runs and commits it (<code>lmice fleet schedule on</code>).</p></div>`;
     }
 
     async function showFleetDrift() {
@@ -908,7 +908,7 @@
     function renderHttps(data) {
       const canChange = state.caps?.actions_enabled;
       $("cards").innerHTML = `<div class="card"><strong>${esc(data.host)}</strong><span>${esc(data.detail)}</span></div>` +
-        `<div class="card"><strong>Katteke CA</strong><span>${data.ca_days_left == null ? "not created yet" : `valid ${esc(data.ca_days_left)} days · ${esc(data.ca_fingerprint.slice(0, 23))}…`}</span></div>` +
+        `<div class="card"><strong>Certificate authority</strong><span>${data.ca_days_left == null ? "not created yet" : `valid ${esc(data.ca_days_left)} days · ${esc(data.ca_fingerprint.slice(0, 23))}…`}</span></div>` +
         `<div class="card"><strong>nginx</strong><span>${pill(data.nginx === "active" ? "ok" : data.nginx || "unknown")}</span></div>`;
       const rows = data.sites.map((s) => `<tr><td><b>${esc(s.name)}</b></td><td><a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.url)}</a></td><td class="detail">${esc(s.to)}</td><td>${pill(s.state === "ok" ? "ok" : "warn")} <span class="muted">${esc(s.detail)}</span></td><td><button data-https-remove="${esc(s.name)}" type="button" ${canChange ? "" : "disabled"}>Remove…</button></td></tr>`).join("");
       $("view").innerHTML = (rows ? `<div class="scroll"><table><thead><tr><th>Site</th><th>Address</th><th>Forwards to</th><th>State</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>` : `<div class="empty">No HTTPS sites yet.</div>`) +
@@ -918,7 +918,7 @@
           <label>Forwards to <input name="to" required placeholder="http://127.0.0.1:7345"></label>
           <div class="toolbar"><button class="primary" type="submit" ${canChange ? "" : "disabled"}>Add site</button><button data-https-apply type="button" ${canChange ? "" : "disabled"}>Renew and re-apply</button><span class="muted" id="httpsMessage" role="status"></span></div>
         </form></div>` +
-        `<div class="panel"><p>Devices trust these addresses once they trust Katteke's CA: <code>lmice https trust</code> on Linux; on the Mac and phones it asks for your password once. Names come from <code>lmice https names</code>. The certificate renews itself under 30 days left. <code>lmice https</code></p></div>`;
+        `<div class="panel"><p>Devices trust these addresses once they trust your certificate authority: <code>lmice https trust</code> on Linux; on the Mac and phones it asks for your password once. Names come from <code>lmice https names</code>. The certificate renews itself under 30 days left. <code>lmice https</code></p></div>`;
       $("httpsForm").addEventListener("submit", async (event) => {
         event.preventDefault();
         const f = new FormData(event.target);
@@ -1066,7 +1066,7 @@
         <td class="actions"><div class="toolbar"><button class="primary" data-vault-copy="${esc(e.name)}" type="button">Copy password</button>${e.has_totp ? `<button data-vault-code="${esc(e.name)}" type="button">Copy code</button>` : ""}<button data-vault-edit="${esc(e.name)}" type="button">Edit</button></div></td></tr>`).join("");
       const changes = state.views.changes?.data?.changes || [];
       const uses = changes.filter((c) => /vault/.test(`${c.action} ${c.change || ""} ${c.command || ""}`)).slice(0, 12);
-      const purpose = { katteke: "Katteke", work: "work" }[v.which] || "yourself";
+      const purpose = v.which && v.which !== "personal" ? v.which : "yourself";
       $("view").innerHTML = requests +
         `<div class="toolbar vault-switch">${d.vaults.map((name) => `<button data-vault-which="${esc(name)}" class="${name === v.which ? "active" : ""}" type="button">${esc(name)} (${counts[name]})</button>`).join("")}
           <input id="vaultFilter" type="search" placeholder="Find a login" aria-label="Find a login" value="${esc(v.filter)}">
@@ -1296,11 +1296,11 @@
       ports: ["Ports", "What listens where, and who can reach it: this machine only, the tailnet, WireGuard, the LAN, or every interface with the firewall deciding."],
       compare: ["Compare", "What is installed and running on two machines, side by side: how alike they are, what only one has, and where versions differ."],
       hardware: ["Hardware", "What each machine is, what it can still take, and what it costs to keep running, next to machines you could buy."],
-      https: ["HTTPS", "Addresses like https://lawnmower.katteke.internal:3443 with Katteke's own certificates, reachable over the tailnet and LinuxMice's WireGuard, without Tailscale's."],
+      https: ["HTTPS", "Addresses like https://DEVICE.yourorg.internal:3443 with your own certificates, reachable over the tailnet and LinuxMice's WireGuard, without Tailscale's."],
       backups: ["Backups", "Backups pulled from other machines, how fresh they are, and whether they can be read."],
-      agents: ["Agents", "Claude sessions on lawnmower: Remote Control, their browser and their sandboxed desktops."],
-      org: ["Organization", "Katteke's devices against its policies, who can sign in, and every change made through LinuxMice."],
-      vault: ["Vault", "Passwords and tokens for you and your agents, in three vaults with their own keys: personal, katteke and work."],
+      agents: ["Agents", "Claude sessions on this machine: Remote Control, their browser and their sandboxed desktops."],
+      org: ["Organization", "Your organization's devices against its policies, who can sign in, and every change made through LinuxMice."],
+      vault: ["Vault", "Passwords and tokens for you and your agents, in vaults with their own keys."],
     };
     function setTab(tab, push = true) {
       if (!PAGES[tab]) tab = "attention";
