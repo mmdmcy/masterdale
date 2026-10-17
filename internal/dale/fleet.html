@@ -612,7 +612,7 @@
         `<tr><th>Agent browser</th><td>${browser}</td><td>${d.browser ? button("agents-browser-off", "Turn off…", "danger") : button("agents-browser-on", "Turn on…")}</td></tr>` +
         `<tr><th>Agent desktop</th><td>${desktop}<br><span class="muted">Sandboxed Debian + XFCE + Firefox desktops for computer use; they reach the internet, not your network, and not each other. Viewer password: ~/.config/linuxmice/agent-desktop/vnc-password on ${esc(d.device)}.</span></td><td>${desktopOn ? button("agents-desktop-off", "Turn off…", "danger") : button("agents-desktop-on", "Turn on…")}</td></tr>` +
         profileRows +
-        `<tr><th>T3 Code</th><td>${t3}</td><td></td></tr>` +
+        `<tr><th>T3 Code</th><td>${t3}${d.t3code && d.device === state.caps?.device ? `<br><span class="muted">First time in a browser: pair it, then it stays paired. The link is made fresh and works for 5 minutes.</span>` : ""}</td><td>${d.t3code && d.t3code_url && d.device === state.caps?.device ? `<button data-t3code-pair type="button" ${dis}>Pair this browser</button>` : ""}</td></tr>` +
         `</tbody></table></div>` +
         (d.next?.length ? `<div class="panel"><p><b>Next</b></p><ul>${d.next.map((step) => `<li>${esc(step)}</li>`).join("")}</ul></div>` : "");
     }
@@ -1479,6 +1479,18 @@
       }
       const setupButton = event.target.closest("button[data-setup]");
       if (setupButton) { runSetupJob(setupButton.dataset.setup); return; }
+      if (event.target.closest("button[data-t3code-pair]")) {
+        // Opened now, while the click still counts, so no popup blocker stops it.
+        const tab = window.open("about:blank", "_blank");
+        $("meta").textContent = "making a T3 Code pairing link…";
+        api("/v1/linuxmice/t3code-pair", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" })
+          .then((data) => {
+            if (tab) { tab.opener = null; tab.location.href = data.url; } else window.location.href = data.url;
+            $("meta").textContent = "T3 Code opened in a new tab and pairs itself there";
+          })
+          .catch((error) => { if (tab) tab.close(); $("meta").textContent = `failed: ${error.message}`; });
+        return;
+      }
       const desktopProfile = event.target.closest("button[data-desktop-profile]");
       if (desktopProfile) {
         const { desktopProfile: action, id, device } = desktopProfile.dataset;

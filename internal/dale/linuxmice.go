@@ -206,6 +206,10 @@ func (s *Server) handleLinuxMice(w http.ResponseWriter, r *http.Request) {
 		s.handleLinuxMiceJobs(w, r, strings.TrimPrefix(strings.TrimPrefix(name, "jobs"), "/"))
 		return
 	}
+	if name == "t3code-pair" {
+		s.handleT3CodePair(w, r)
+		return
+	}
 	if r.Method != http.MethodGet {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
@@ -745,4 +749,57 @@ func (c *linuxmiceCache) listJobs() []LinuxMiceJob {
 	}
 	sort.Slice(jobs, func(i, j int) bool { return jobs[i].StartedAt > jobs[j].StartedAt })
 	return jobs
+}
+
+// handleT3CodePair gives a signed-in person a fresh T3 Code pairing link for
+// this machine (`lmice app open t3code`). The link is a five-minute
+// secret: it goes straight back to the browser, which opens it, and is never
+// kept in a job or a log.
+func (s *Server) handleT3CodePair(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	if !sameOriginJSON(r) {
+		writeError(w, http.StatusForbidden, errors.New("pairing needs a same-origin JSON request"))
+		return
+	}
+	if s.oidc == nil || !s.oidc.authorizeSession(r) {
+		writeError(w, http.StatusForbidden, errors.New("pairing needs you signed in to Masterdale (a device token or a local request is not enough)"))
+		return
+	}
+	if !LinuxMiceActionsEnabled() {
+		writeError(w, http.StatusForbidden, errors.New("changes are turned off on this node (DALE_LINUXMICE_ACTIONS)"))
+		return
+	}
+	out, errOut, err := runLmice(r.Context(), []string{"--yes", "app", "open", "t3code", "--format", "json"}, nil, true, 60*time.Second)
+	link, ok := t3codePairLink(out)
+	if !ok {
+		writeError(w, http.StatusBadGateway, lmiceError(errOut, err))
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	writeJSON(w, http.StatusOK, map[string]string{"url": link})
+}
+
+// t3codePairLink takes the pairing link out of `lmice app open --format
+// json`, accepting only an https link to T3 Code's /pair page.
+func t3codePairLink(out []byte) (string, bool) {
+	start := bytes.IndexByte(out, '{')
+	if start < 0 {
+		return "", false
+	}
+	var response struct {
+		Data struct {
+			Handoff string `json:"handoff"`
+		} `json:"data"`
+	}
+	if err := json.NewDecoder(bytes.NewReader(out[start:])).Decode(&response); err != nil {
+		return "", false
+	}
+	link, err := url.Parse(response.Data.Handoff)
+	if err != nil || link.Scheme != "https" || link.Host == "" || link.User != nil || link.Path != "/pair" || link.Fragment == "" {
+		return "", false
+	}
+	return link.String(), true
 }

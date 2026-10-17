@@ -1,6 +1,7 @@
 package dale
 
 import (
+	"encoding/json"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
@@ -165,5 +166,25 @@ func TestCheckoutUpdateJobTakesAnOptionalPlainDevice(t *testing.T) {
 	}
 	if _, _, err := linuxmiceJobArgs(LinuxMiceJobRequest{Kind: "checkouts-update", Device: "--all"}); err == nil {
 		t.Fatal("a flag must not pass as a device")
+	}
+}
+
+func TestT3CodePairLinkAcceptsOnlyAPairPage(t *testing.T) {
+	good := []byte("note\n{\"data\":{\"handoff\":\"https://box.example.ts.net/pair#token=abc\"}}\nyes: accepted\n")
+	if link, ok := t3codePairLink(good); !ok || link != "https://box.example.ts.net/pair#token=abc" {
+		t.Fatalf("got %q %v", link, ok)
+	}
+	for _, handoff := range []string{
+		"http://box.example.ts.net/pair#token=abc",
+		"https://box.example.ts.net/other#token=abc",
+		"https://box.example.ts.net/pair",
+		"https://user@box.example.ts.net/pair#token=abc",
+		"javascript:alert(1)",
+		"",
+	} {
+		out, _ := json.Marshal(map[string]any{"data": map[string]string{"handoff": handoff}})
+		if _, ok := t3codePairLink(out); ok {
+			t.Fatalf("accepted %q", handoff)
+		}
 	}
 }
