@@ -206,6 +206,7 @@
     <button data-tab="compare" type="button">Compare</button>
     <button data-tab="services" type="button">Services</button>
     <button data-tab="ports" type="button">Ports</button>
+    <button data-tab="display" type="button">Display</button>
     <button data-tab="fleetfile" type="button">Fleet file</button>
     <button data-tab="modules" type="button">Modules</button>
     <button data-tab="rescue" type="button">Recovery</button>
@@ -318,7 +319,7 @@
     async function load(force) {
       if (state.tab === "vault") { loadVault(); return; }
       if (state.tab === "compare") { renderCompareForm(); return; }
-      if (state.tab === "services" || state.tab === "ports") { loadDeviceView(state.tab, force); return; }
+      if (state.tab === "services" || state.tab === "ports" || state.tab === "display") { loadDeviceView(state.tab, force); return; }
       const name = viewName();
       let path = `/v1/linuxmice/${name}`;
       const params = new URLSearchParams();
@@ -739,7 +740,7 @@
         const view = await api(`/v1/linuxmice/${kind}?device=${encodeURIComponent(state.opsDevice)}${force ? "&refresh=1" : ""}`);
         if (view.error) throw new Error(view.error);
         $("opsMessage").textContent = view.data.detail;
-        (kind === "services" ? showServices : showPorts)(view.data);
+        ({ services: showServices, ports: showPorts, display: showDisplay })[kind](view.data);
       } catch (error) { $("opsMessage").textContent = `failed: ${error.message}`; }
     }
 
@@ -755,6 +756,14 @@
       const rows = d.ports.map((p) => `<tr><td>${esc(p.proto)}</td><td><b>${p.port}</b></td><td>${esc(p.address)}</td><td>${esc(p.process)}</td><td>${pill(level(p.reach))} ${esc(p.reach)}</td><td class="detail">${p.rules.map(esc).join("<br>")}</td></tr>`).join("");
       $("cards").innerHTML = `<div class="card"><strong>Firewall</strong><span>${esc(d.firewall)}</span></div>`;
       $("opsResult").innerHTML = `<div class="scroll"><table><thead><tr><th>Proto</th><th>Port</th><th>Address</th><th>Program</th><th>Who can reach it</th><th>Firewall rules</th></tr></thead><tbody>${rows}</tbody></table></div><div class="panel"><p><code>lmice ports --device ${esc(d.device)}</code></p></div>`;
+    }
+
+    function showDisplay(d) {
+      const canChange = state.caps?.actions_enabled;
+      const rows = d.connectors.map((c) => `<tr><td><b>${esc(c.name)}</b></td><td>${pill(c.status === "connected" ? "ok" : "unknown")} <span class="muted">${esc(c.status)}</span></td><td>${c.enabled ? "in use" : ""}</td><td>${c.virtual_screen ? "virtual screen" : ""}</td></tr>`).join("");
+      const on = !!(d.virtual_connector && d.at_boot);
+      $("cards").innerHTML = `<div class="card"><strong>Virtual screen</strong><span>${on ? esc(`${d.virtual_connector}, ${d.virtual_size}`) : "off"}</span></div>`;
+      $("opsResult").innerHTML = `<div class="scroll"><table><thead><tr><th>Connector</th><th>State</th><th></th><th></th></tr></thead><tbody>${rows}</tbody></table></div><div class="panel"><p>A virtual screen lets remote desktop (RustDesk) work with no monitor or dummy plug: the graphics driver is told a monitor is on a free connector. It stays after restarts; nothing about the boot changes.</p><button data-display="${on ? "off" : "on"}" type="button" ${canChange && (on || d.supported) ? "" : "disabled"}>${on ? "Turn off…" : "Turn on…"}</button><p><code>lmice display --device ${esc(d.device)}</code> · <code>lmice display virtual on|off --device ${esc(d.device)}</code></p></div>`;
     }
 
     function renderCompareForm() {
@@ -790,7 +799,7 @@
     }
 
     // Pages that belong to a module; they hide when it is off here.
-    const MODULE_TABS = { workspace: ["repos", "folders", "move", "projects"], agents: ["agents"], org: ["org"], inventory: ["hardware", "compare"], servers: ["selfhost"], backups: ["backups"], https: ["https"], vault: ["vault"], integrations: ["integrations"] };
+    const MODULE_TABS = { workspace: ["repos", "folders", "move", "projects"], agents: ["agents"], org: ["org"], inventory: ["hardware", "compare"], servers: ["selfhost"], backups: ["backups"], https: ["https"], display: ["display"], vault: ["vault"], integrations: ["integrations"] };
     async function hideOffModules() {
       try {
         const view = await api("/v1/linuxmice/modules");
@@ -1111,6 +1120,17 @@
       } catch (error) { vaultMessage(`Not added: ${error.message}`); return; }
       await loadVault(true); renderVault();
     });
+    $("view").addEventListener("click", (event) => {
+      if (state.tab !== "display") return;
+      const b = event.target.closest("button[data-display]");
+      if (!b) return;
+      const action = b.dataset.display, device = state.opsDevice;
+      askConfirm(`lmice display virtual ${action} --device ${device}`, action === "on" ? "The desktop gets one more screen on a free connector, also after restarts." : "The virtual screen goes away; the files are kept.", async () => {
+        const job = await startJob({ kind: `display-${action}`, device });
+        $("opsMessage").textContent = job.state === "done" ? `virtual screen ${action}` : `failed: ${job.view.error || ""}`;
+        loadDeviceView("display", true);
+      });
+    });
     $("view").addEventListener("click", async (event) => {
       if (state.tab !== "services") return;
       const b = event.target.closest("button");
@@ -1235,6 +1255,7 @@
       modules: ["Modules", "LinuxMice is a small core plus building blocks. Switch a block off and its commands, checks, timer and pages disappear on this machine; nothing is deleted."],
       fleetfile: ["Fleet file", "Every machine, what it is for and what it runs, in one file. With it and last night's backup, any of them can be rebuilt on a fresh machine."],
       services: ["Services", "Everything that runs on a machine: system and user services, timers and containers. Read a service's logs or restart it."],
+      display: ["Display", "A virtual screen so remote desktop works on a machine without a monitor, and which outputs have a screen now."],
       ports: ["Ports", "What listens where, and who can reach it: this machine only, the tailnet, WireGuard, the LAN, or every interface with the firewall deciding."],
       compare: ["Compare", "What is installed and running on two machines, side by side: how alike they are, what only one has, and where versions differ."],
       hardware: ["Hardware", "What each machine is, what it can still take, and what it costs to keep running, next to machines you could buy."],

@@ -137,3 +137,13 @@ func TestServiceRestartTakesOnlyPlainNames(t *testing.T) {
 		}
 	}
 }
+
+func TestDisplayJobsTakeOnlyADevice(t *testing.T) {
+	args, changes, err := linuxmiceJobArgs(LinuxMiceJobRequest{Kind: "display-on", Device: "lawnmower"})
+	if err != nil || !changes || strings.Join(args, " ") != "--yes display virtual on --device lawnmower" {
+		t.Fatalf("display-on: %v %v %v", args, changes, err)
+	}
+	if _, _, err := linuxmiceJobArgs(LinuxMiceJobRequest{Kind: "display-off", Device: "-oProxyCommand=x"}); err == nil {
+		t.Fatal("a flag must not pass as a device")
+	}
+}

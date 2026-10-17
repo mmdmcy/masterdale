@@ -236,7 +236,7 @@ func (s *Server) handleLinuxMice(w http.ResponseWriter, r *http.Request) {
 			args = append(args, "--patch")
 		}
 		args = append(args, "--format", "json")
-	case "services", "ports":
+	case "services", "ports", "display":
 		device := query.Get("device")
 		if device == "" {
 			device = "lawnmower"
@@ -477,6 +477,11 @@ func linuxmiceJobArgs(req LinuxMiceJobRequest) ([]string, bool, error) {
 			return nil, false, errors.New("pick a device")
 		}
 		return []string{"--yes", "fleet", "apply", "--device", req.Device}, true, nil
+	case "display-on", "display-off":
+		if !linuxmiceDevicePattern.MatchString(req.Device) {
+			return nil, false, errors.New("pick a device")
+		}
+		return []string{"--yes", "display", "virtual", strings.TrimPrefix(req.Kind, "display-"), "--device", req.Device}, true, nil
 	case "https-add":
 		port, err := strconv.Atoi(req.A)
 		if !linuxmiceIDPattern.MatchString(req.ID) || err != nil || port < 1024 || port > 65535 || !linuxmiceUpstreamPattern.MatchString(req.B) {
