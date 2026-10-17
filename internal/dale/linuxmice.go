@@ -70,6 +70,7 @@ var linuxmiceViews = map[string][]string{
 	"servers":      {"servers", "--format", "json"},
 	"tests":        {"tests", "--format", "json"},
 	"apps":         {"app", "list", "--format", "json"},
+	"identity":     {"identity", "--format", "json"},
 	"fleetdiff":    {"fleet", "diff", "--format", "json"},
 	// Not served as a view: names this node for the page.
 	"integrations-local": {"integrations", "--format", "json"},
@@ -225,6 +226,10 @@ func (s *Server) handleLinuxMice(w http.ResponseWriter, r *http.Request) {
 	}
 	if name == "t3code-pair" {
 		s.handleT3CodePair(w, r)
+		return
+	}
+	if strings.HasPrefix(name, "identity/") {
+		s.handleIdentityAction(w, r, strings.TrimPrefix(name, "identity/"))
 		return
 	}
 	if r.Method != http.MethodGet {
@@ -923,4 +928,72 @@ func t3codePairLink(out []byte) (string, bool) {
 		return "", false
 	}
 	return link.String(), true
+}
+
+// identityEmailPattern is an email address as lmice identity accepts it.
+var identityEmailPattern = regexp.MustCompile(`^[A-Za-z0-9._+-]{1,64}@[A-Za-z0-9.-]{1,253}$`)
+
+// handleIdentityAction changes the sign-in service's accounts for a
+// signed-in person: the authenticator app on (its setup key comes back to
+// this browser only, once), confirm, off, and new recovery codes. Secrets
+// are never kept in a job or a log.
+func (s *Server) handleIdentityAction(w http.ResponseWriter, r *http.Request, action string) {
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	if !sameOriginJSON(r) {
+		writeError(w, http.StatusForbidden, errors.New("sign-in changes need a same-origin JSON request"))
+		return
+	}
+	if s.oidc == nil || !s.oidc.authorizeSession(r) {
+		writeError(w, http.StatusForbidden, errors.New("sign-in changes need you signed in to Masterdale (a device token or a local request is not enough)"))
+		return
+	}
+	if !LinuxMiceActionsEnabled() {
+		writeError(w, http.StatusForbidden, errors.New("changes are turned off on this node (DALE_LINUXMICE_ACTIONS)"))
+		return
+	}
+	var req struct {
+		Email string `json:"email"`
+		Code  string `json:"code"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<10)).Decode(&req); err != nil || !identityEmailPattern.MatchString(req.Email) {
+		writeError(w, http.StatusBadRequest, errors.New("give the account's email"))
+		return
+	}
+	var args []string
+	switch action {
+	case "authenticator-on":
+		args = []string{"--format", "json", "identity", "authenticator", "on", "--email", req.Email}
+	case "authenticator-confirm":
+		code := strings.ReplaceAll(req.Code, " ", "")
+		if len(code) != 6 || strings.Trim(code, "0123456789") != "" {
+			writeError(w, http.StatusBadRequest, errors.New("the code is the 6 digits your app shows now"))
+			return
+		}
+		args = []string{"identity", "authenticator", "confirm", "--email", req.Email, "--code", code}
+	case "authenticator-off":
+		args = []string{"--yes", "identity", "authenticator", "off", "--email", req.Email}
+	case "recovery-codes":
+		args = []string{"--yes", "--format", "json", "identity", "recovery-codes", "--email", req.Email}
+	default:
+		writeError(w, http.StatusNotFound, errors.New("unknown sign-in action"))
+		return
+	}
+	out, errOut, err := runLmice(r.Context(), args, nil, true, 60*time.Second)
+	if err != nil {
+		writeError(w, http.StatusBadGateway, lmiceError(errOut, err))
+		return
+	}
+	s.linuxmice.mu.Lock()
+	s.linuxmice.entries = nil
+	s.linuxmice.mu.Unlock()
+	w.Header().Set("Cache-Control", "no-store")
+	if trimmed := bytes.TrimSpace(out); json.Valid(trimmed) && len(trimmed) > 0 && trimmed[0] == '{' {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write(trimmed)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"detail": strings.TrimSpace(string(out))})
 }
