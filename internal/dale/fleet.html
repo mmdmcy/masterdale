@@ -1021,7 +1021,7 @@
         ${list("Checks", d.checks)}
       </tbody></table><div class="toolbar"><button data-fleet-apply="${esc(d.name)}" type="button" ${canChange ? "" : "disabled"}>Make ${esc(d.name)} match…</button></div></div>`).join("");
       $("view").innerHTML = `<div class="panel"><div class="toolbar"><button class="primary" data-fleet-diff type="button">Check for drift</button><button data-fleet-capture type="button" ${canChange ? "" : "disabled"}>Capture and commit now</button><span class="muted" id="fleetMessage" role="status"></span></div><div id="fleetDrift"></div></div>` + devices +
-        `<div class="panel"><p>A fresh machine becomes one of these from the device that holds the backup key: <code>lmice fleet rebuild NEW-MACHINE --as DEVICE</code>. Prove it first with <code>--drill</code> on a spare machine. Every night lawnmower captures what each machine runs and commits it (<code>lmice fleet schedule on</code>).</p></div>`;
+        `<div class="panel"><p>A fresh machine becomes one of these from the device that holds the backup key: <code>lmice fleet rebuild NEW-MACHINE --as DEVICE</code>. Prove it first with <code>--drill</code> on a spare machine. Every night the device that keeps the fleet file captures what each machine runs and commits it (<code>lmice fleet schedule on</code>).</p></div>`;
     }
 
     async function showFleetDrift() {
@@ -1647,7 +1647,7 @@
       const httpsSetup = event.target.closest("button[data-https-setup]");
       if (httpsSetup) {
         const what = httpsSetup.dataset.httpsSetup, device = $("httpsDevice").value;
-        askConfirm(`lmice https ${what} --device ${device}`, what === "trust" ? "Installs your certificate authority on that Linux device (on a Mac or phone you confirm it there yourself)." : "Adds the katteke.internal names to that device's /etc/hosts (the old file is kept).", async () => {
+        askConfirm(`lmice https ${what} --device ${device}`, what === "trust" ? "Installs your certificate authority on that Linux device (on a Mac or phone you confirm it there yourself)." : "Adds the sites' names to that device's /etc/hosts (the old file is kept).", async () => {
           try { const job = await startJob({ kind: `https-${what}`, device }); $("meta").textContent = job.state === "done" ? "done" : `failed: ${job.view?.error || ""}`; } catch (error) { $("meta").textContent = `failed: ${error.message}`; }
         });
         return;
