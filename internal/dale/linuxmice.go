@@ -236,7 +236,7 @@ func (s *Server) handleLinuxMice(w http.ResponseWriter, r *http.Request) {
 			args = append(args, "--patch")
 		}
 		args = append(args, "--format", "json")
-	case "services", "ports", "display":
+	case "services", "ports", "display", "windows":
 		device := query.Get("device")
 		if device == "" {
 			device = "lawnmower"

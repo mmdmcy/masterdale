@@ -6,6 +6,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/mmdmcy/masterdale/internal/dale"
 )
 
 func TestMarshalOpenSSHPrivateKeyIsReadableBySSHKeygen(t *testing.T) {
@@ -47,5 +50,14 @@ func TestSSHConfigLinesHaveAlias(t *testing.T) {
 		if sshConfigLinesHaveAlias(config, alias) {
 			t.Fatalf("expected alias %q to be absent", alias)
 		}
+	}
+}
+
+func TestRemoteRunWaitsAsLongAsItsTimeout(t *testing.T) {
+	if got := requestTimeout(dale.ExecRequest{TimeoutSeconds: 900}); got != 930*time.Second {
+		t.Fatalf("900 s command: client waits %v", got)
+	}
+	if got := requestTimeout(dale.ExecRequest{TimeoutSeconds: 10}); got != 2*time.Minute {
+		t.Fatalf("short command: client waits %v", got)
 	}
 }

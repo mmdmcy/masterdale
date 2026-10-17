@@ -207,6 +207,7 @@
     <button data-tab="services" type="button">Services</button>
     <button data-tab="ports" type="button">Ports</button>
     <button data-tab="display" type="button">Display</button>
+    <button data-tab="windows" type="button">Windows</button>
     <button data-tab="fleetfile" type="button">Fleet file</button>
     <button data-tab="modules" type="button">Modules</button>
     <button data-tab="rescue" type="button">Recovery</button>
@@ -319,7 +320,7 @@
     async function load(force) {
       if (state.tab === "vault") { loadVault(); return; }
       if (state.tab === "compare") { renderCompareForm(); return; }
-      if (state.tab === "services" || state.tab === "ports" || state.tab === "display") { loadDeviceView(state.tab, force); return; }
+      if (state.tab === "services" || state.tab === "ports" || state.tab === "display" || state.tab === "windows") { loadDeviceView(state.tab, force); return; }
       const name = viewName();
       let path = `/v1/linuxmice/${name}`;
       const params = new URLSearchParams();
@@ -739,8 +740,8 @@
       try {
         const view = await api(`/v1/linuxmice/${kind}?device=${encodeURIComponent(state.opsDevice)}${force ? "&refresh=1" : ""}`);
         if (view.error) throw new Error(view.error);
-        $("opsMessage").textContent = view.data.detail;
-        ({ services: showServices, ports: showPorts, display: showDisplay })[kind](view.data);
+        $("opsMessage").textContent = view.data.detail || "";
+        ({ services: showServices, ports: showPorts, display: showDisplay, windows: showWindows })[kind](view.data);
       } catch (error) { $("opsMessage").textContent = `failed: ${error.message}`; }
     }
 
@@ -756,6 +757,27 @@
       const rows = d.ports.map((p) => `<tr><td>${esc(p.proto)}</td><td><b>${p.port}</b></td><td>${esc(p.address)}</td><td>${esc(p.process)}</td><td>${pill(level(p.reach))} ${esc(p.reach)}</td><td class="detail">${p.rules.map(esc).join("<br>")}</td></tr>`).join("");
       $("cards").innerHTML = `<div class="card"><strong>Firewall</strong><span>${esc(d.firewall)}</span></div>`;
       $("opsResult").innerHTML = `<div class="scroll"><table><thead><tr><th>Proto</th><th>Port</th><th>Address</th><th>Program</th><th>Who can reach it</th><th>Firewall rules</th></tr></thead><tbody>${rows}</tbody></table></div><div class="panel"><p><code>lmice ports --device ${esc(d.device)}</code></p></div>`;
+    }
+
+    function showWindows(d) {
+      const gb = (b) => b == null ? "?" : `${(b / 1e9).toFixed(1)} GB`;
+      const card = (title, value, level) => `<div class="card"><strong>${esc(title)}</strong><span>${level ? pill(level) + " " : ""}${esc(value)}</span></div>`;
+      $("opsMessage").textContent = `${d.windows} (build ${d.build}), up ${d.uptime_hours ?? "?"} h`;
+      $("cards").innerHTML = [
+        card("Machine", d.machine),
+        card("Memory free", `${gb(d.memory_free_bytes)} of ${gb(d.memory_bytes)}; WSL holds ${gb(d.wsl_memory_bytes)}`),
+        card("C:", `${gb(d.disk_c_free_bytes)} free of ${gb(d.disk_c_bytes)}`),
+        card("Security", `Defender ${d.defender_on === false ? "off" : d.defender_on ? "on" : "unknown"}, firewall ${d.firewall_off.length ? "partly off" : "on"}`, d.defender_on === false || d.firewall_off.length ? "critical" : "ok"),
+        card("Updates", d.restart_pending ? "restart pending" : "nothing waiting", d.restart_pending ? "warn" : "ok"),
+        d.battery_percent != null ? card("Battery", `${d.battery_percent}%${d.on_power ? ", on power" : ""}`) : "",
+        ...d.gpus.map((g) => card(g.name, `${g.temperature_c ?? "?"} °C, ${g.watts == null ? "?" : g.watts.toFixed(0)} W, ${g.power_state}, ${g.busy_percent ?? 0}% busy`, (g.temperature_c ?? 0) >= 85 ? "critical" : "ok")),
+      ].join("");
+      const list = (items) => items.length ? items.map((x) => `<li>${x}</li>`).join("") : "<li class=\"muted\">none</li>";
+      $("opsResult").innerHTML = `<div class="panel">${d.notes.length ? `<ul>${list(d.notes.map(esc))}</ul>` : "<p>Nothing needs attention.</p>"}</div>
+        <div class="panel"><p><b>Most memory</b></p><ul>${list(d.heaviest.map(([n, b]) => `${esc(n)} <span class="muted">${gb(b)}</span>`))}</ul>
+        <p><b>Starts with Windows</b> (${d.startup_programs.length})</p><ul>${list(d.startup_programs.map(esc))}</ul>
+        <p><b>LinuxMice tasks</b></p><ul>${list(d.tasks.map(([t, s]) => `${esc(t)}: ${esc(s)}`))}</ul>
+        <p class="muted">Read from inside the device's LinuxMice WSL distribution; nothing in Windows is changed. <code>lmice windows --device ${esc(d.device)}</code></p></div>`;
     }
 
     function showDisplay(d) {
@@ -799,7 +821,7 @@
     }
 
     // Pages that belong to a module; they hide when it is off here.
-    const MODULE_TABS = { workspace: ["repos", "folders", "move", "projects"], agents: ["agents"], org: ["org"], inventory: ["hardware", "compare"], servers: ["selfhost"], backups: ["backups"], https: ["https"], display: ["display"], vault: ["vault"], integrations: ["integrations"] };
+    const MODULE_TABS = { workspace: ["repos", "folders", "move", "projects"], agents: ["agents"], org: ["org"], inventory: ["hardware", "compare"], servers: ["selfhost"], backups: ["backups"], https: ["https"], display: ["display"], windows: ["windows"], vault: ["vault"], integrations: ["integrations"] };
     async function hideOffModules() {
       try {
         const view = await api("/v1/linuxmice/modules");
@@ -1255,6 +1277,7 @@
       modules: ["Modules", "LinuxMice is a small core plus building blocks. Switch a block off and its commands, checks, timer and pages disappear on this machine; nothing is deleted."],
       fleetfile: ["Fleet file", "Every machine, what it is for and what it runs, in one file. With it and last night's backup, any of them can be rebuilt on a fresh machine."],
       services: ["Services", "Everything that runs on a machine: system and user services, timers and containers. Read a service's logs or restart it."],
+      windows: ["Windows", "Windows laptops through their LinuxMice WSL device: version, updates, security, GPU heat, memory, what starts with Windows."],
       display: ["Display", "A virtual screen so remote desktop works on a machine without a monitor, and which outputs have a screen now."],
       ports: ["Ports", "What listens where, and who can reach it: this machine only, the tailnet, WireGuard, the LAN, or every interface with the firewall deciding."],
       compare: ["Compare", "What is installed and running on two machines, side by side: how alike they are, what only one has, and where versions differ."],

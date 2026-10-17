@@ -989,11 +989,27 @@ func remotePOST(baseURL string, path string, body any, token string, out any) er
 	req, _ := http.NewRequestWithContext(context.Background(), http.MethodPost, baseURL+path, bytes.NewReader(b))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+token)
-	return doJSON(req, out)
+	return doJSONWithin(req, out, requestTimeout(body))
+}
+
+// requestTimeout waits as long as a remote command may run, plus a margin,
+// so a long `remote run --timeout` is not cut off by the client.
+func requestTimeout(body any) time.Duration {
+	timeout := 2 * time.Minute
+	if exec, ok := body.(dale.ExecRequest); ok {
+		if wanted := time.Duration(exec.TimeoutSeconds)*time.Second + 30*time.Second; wanted > timeout {
+			timeout = wanted
+		}
+	}
+	return timeout
 }
 
 func doJSON(req *http.Request, out any) error {
-	client := http.Client{Timeout: 2 * time.Minute}
+	return doJSONWithin(req, out, 2*time.Minute)
+}
+
+func doJSONWithin(req *http.Request, out any, timeout time.Duration) error {
+	client := http.Client{Timeout: timeout}
 	resp, err := client.Do(req)
 	if err != nil {
 		return err
