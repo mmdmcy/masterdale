@@ -147,3 +147,13 @@ func TestDisplayJobsTakeOnlyADevice(t *testing.T) {
 		t.Fatal("a flag must not pass as a device")
 	}
 }
+
+func TestNetJobsTakeOnlyPlainNames(t *testing.T) {
+	args, changes, err := linuxmiceJobArgs(LinuxMiceJobRequest{Kind: "net-join", Device: "mini"})
+	if err != nil || !changes || strings.Join(args, " ") != "--yes net join --device mini" {
+		t.Fatalf("net-join: %v %v %v", args, changes, err)
+	}
+	if _, _, err := linuxmiceJobArgs(LinuxMiceJobRequest{Kind: "net-remove", ID: "--all"}); err == nil {
+		t.Fatal("a flag must not pass as a member")
+	}
+}
