@@ -85,3 +85,42 @@ func TestForwardedLoopbackRequestIsNotDirectLoopback(t *testing.T) {
 		t.Fatal("expected a reverse-proxied loopback request to require authentication")
 	}
 }
+
+func TestLoopbackTrustRefusesWebPages(t *testing.T) {
+	make := func(method, host, origin, contentType, site string) *http.Request {
+		r := httptest.NewRequest(method, "http://"+host+"/v1/exec", nil)
+		r.RemoteAddr = "127.0.0.1:50000"
+		r.Host = host
+		if origin != "" {
+			r.Header.Set("Origin", origin)
+		}
+		if contentType != "" {
+			r.Header.Set("Content-Type", contentType)
+		}
+		if site != "" {
+			r.Header.Set("Sec-Fetch-Site", site)
+		}
+		return r
+	}
+	trusted := []*http.Request{
+		make(http.MethodPost, "127.0.0.1:7345", "", "application/json", ""),
+		make(http.MethodGet, "localhost:7345", "", "", ""),
+		make(http.MethodPost, "127.0.0.1:7345", "http://127.0.0.1:7345", "application/json", "same-origin"),
+	}
+	for _, r := range trusted {
+		if !isTrustedLoopbackRequest(r) {
+			t.Fatalf("should be trusted: %s %s origin=%q", r.Method, r.Host, r.Header.Get("Origin"))
+		}
+	}
+	refused := []*http.Request{
+		make(http.MethodPost, "127.0.0.1:7345", "https://evil.example", "application/json", ""),
+		make(http.MethodPost, "127.0.0.1:7345", "", "text/plain", ""),
+		make(http.MethodPost, "evil.example:7345", "", "application/json", ""),
+		make(http.MethodGet, "127.0.0.1:7345", "", "", "cross-site"),
+	}
+	for _, r := range refused {
+		if isTrustedLoopbackRequest(r) {
+			t.Fatalf("should be refused: %s %s origin=%q type=%q", r.Method, r.Host, r.Header.Get("Origin"), r.Header.Get("Content-Type"))
+		}
+	}
+}

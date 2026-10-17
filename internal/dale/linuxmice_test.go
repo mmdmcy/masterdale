@@ -28,6 +28,7 @@ func getLinuxMice(t *testing.T, server *Server, path string) (int, LinuxMiceView
 	t.Helper()
 	req := httptest.NewRequest(http.MethodGet, path, nil)
 	req.RemoteAddr = "127.0.0.1:12345"
+	req.Host = "127.0.0.1:7345"
 	w := httptest.NewRecorder()
 	server.Handler().ServeHTTP(w, req)
 	var view LinuxMiceView
@@ -106,6 +107,7 @@ func postJob(t *testing.T, server *Server, body string, origin string) *httptest
 	t.Helper()
 	req := httptest.NewRequest(http.MethodPost, "/v1/linuxmice/jobs", bytes.NewBufferString(body))
 	req.RemoteAddr = "127.0.0.1:12345"
+	req.Host = "127.0.0.1:7345"
 	req.Header.Set("Content-Type", "application/json")
 	if origin != "" {
 		req.Header.Set("Origin", origin)
@@ -154,8 +156,8 @@ func TestLinuxMiceJobsPlanFreelyAndChangeOnlyWhenAllowed(t *testing.T) {
 	if w := postJob(t, server, `{"kind":"execute-sync","a":"nitori","b":"lawnmower"}`, ""); w.Code != http.StatusForbidden {
 		t.Fatalf("execute without DALE_LINUXMICE_ACTIONS: want 403, got %d", w.Code)
 	}
-	if w := postJob(t, server, `{"kind":"plan-sync","a":"nitori","b":"lawnmower"}`, "https://evil.example"); w.Code != http.StatusForbidden {
-		t.Fatalf("cross-origin job: want 403, got %d", w.Code)
+	if w := postJob(t, server, `{"kind":"plan-sync","a":"nitori","b":"lawnmower"}`, "https://evil.example"); w.Code != http.StatusForbidden && w.Code != http.StatusUnauthorized {
+		t.Fatalf("cross-origin job: want it refused, got %d", w.Code)
 	}
 	for _, body := range []string{
 		`{"kind":"plan-sync","a":"nitori","b":"nitori"}`,

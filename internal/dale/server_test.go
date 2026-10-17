@@ -22,6 +22,8 @@ func TestServerEventsAndMCP(t *testing.T) {
 	body := []byte(`{"actor":"user","channel":"chat","kind":"message.created","body":{"text":"hello"}}`)
 	req := httptest.NewRequest(http.MethodPost, "/v1/events", bytes.NewReader(body))
 	req.RemoteAddr = "127.0.0.1:12345"
+	req.Host = "127.0.0.1:7345"
+	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	server.Handler().ServeHTTP(w, req)
 	if w.Code != http.StatusCreated {
@@ -30,6 +32,8 @@ func TestServerEventsAndMCP(t *testing.T) {
 	mcp := []byte(`{"jsonrpc":"2.0","id":1,"method":"initialize"}`)
 	req = httptest.NewRequest(http.MethodPost, "/mcp", bytes.NewReader(mcp))
 	req.RemoteAddr = "127.0.0.1:12345"
+	req.Host = "127.0.0.1:7345"
+	req.Header.Set("Content-Type", "application/json")
 	w = httptest.NewRecorder()
 	server.Handler().ServeHTTP(w, req)
 	if w.Code != http.StatusOK {
@@ -73,6 +77,7 @@ func TestServerDashboardRoutes(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "/dashboard", nil)
 	req.RemoteAddr = "127.0.0.1:12345"
+	req.Host = "127.0.0.1:7345"
 	w := httptest.NewRecorder()
 	server.Handler().ServeHTTP(w, req)
 	if w.Code != http.StatusOK {
@@ -84,6 +89,7 @@ func TestServerDashboardRoutes(t *testing.T) {
 
 	req = httptest.NewRequest(http.MethodGet, "/v1/dashboard", nil)
 	req.RemoteAddr = "127.0.0.1:12345"
+	req.Host = "127.0.0.1:7345"
 	w = httptest.NewRecorder()
 	server.Handler().ServeHTTP(w, req)
 	if w.Code != http.StatusOK {

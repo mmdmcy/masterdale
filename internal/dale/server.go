@@ -7,6 +7,7 @@ import (
 	"errors"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -92,7 +93,7 @@ func (s *Server) authMiddleware(next http.Handler) http.Handler {
 			writeError(w, http.StatusForbidden, errors.New("remote access is restricted to loopback and private-network addresses by default; set DALE_REMOTE_SCOPE=public only if a firewall or reverse proxy protects this service"))
 			return
 		}
-		if r.URL.Path == "/healthz" || isDashboardShellRequest(r) || isOIDCRoute(r) || isDirectLoopbackRequest(r) || isVaultAnswerRoute(r) {
+		if r.URL.Path == "/healthz" || isDashboardShellRequest(r) || isOIDCRoute(r) || isTrustedLoopbackRequest(r) || isVaultAnswerRoute(r) {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -151,6 +152,45 @@ func isDirectLoopbackRequest(r *http.Request) bool {
 		r.Header.Get("X-Forwarded-For") == "" &&
 		r.Header.Get("X-Forwarded-Host") == "" &&
 		r.Header.Get("X-Forwarded-Proto") == ""
+}
+
+// isTrustedLoopbackRequest is a direct loopback request that cannot have
+// come from a web page: a page in a browser on this machine could otherwise
+// reach 127.0.0.1 and act without signing in. The Host must name loopback
+// (no DNS rebinding), an Origin must be loopback too, browsers' cross-site
+// requests are refused, and changes must be JSON (which a cross-origin page
+// cannot send without a preflight this server never grants).
+func isTrustedLoopbackRequest(r *http.Request) bool {
+	if !isDirectLoopbackRequest(r) || !isLoopbackHost(r.Host) {
+		return false
+	}
+	if site := r.Header.Get("Sec-Fetch-Site"); site == "cross-site" || site == "same-site" {
+		return false
+	}
+	if origin := r.Header.Get("Origin"); origin != "" {
+		parsed, err := url.Parse(origin)
+		if err != nil || !isLoopbackHost(parsed.Host) {
+			return false
+		}
+	}
+	switch r.Method {
+	case http.MethodGet, http.MethodHead, http.MethodOptions:
+		return true
+	}
+	return strings.HasPrefix(r.Header.Get("Content-Type"), "application/json")
+}
+
+func isLoopbackHost(hostport string) bool {
+	host := hostport
+	if h, _, err := net.SplitHostPort(hostport); err == nil {
+		host = h
+	}
+	host = strings.Trim(strings.ToLower(host), "[]")
+	if host == "localhost" {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }
 
 func requestIP(r *http.Request) net.IP {
