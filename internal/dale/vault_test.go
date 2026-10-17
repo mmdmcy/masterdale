@@ -188,3 +188,23 @@ func TestT3CodePairLinkAcceptsOnlyAPairPage(t *testing.T) {
 		}
 	}
 }
+
+func TestRemoveAndGithubJobsAreFixed(t *testing.T) {
+	args, changes, err := linuxmiceJobArgs(LinuxMiceJobRequest{Kind: "remove", ID: "opencode", Device: "mini", A: "data"})
+	if err != nil || !changes || strings.Join(args, " ") != "--yes --format json remove opencode --device mini --with-data" {
+		t.Fatalf("got %v %v %v", args, changes, err)
+	}
+	for _, bad := range []LinuxMiceJobRequest{
+		{Kind: "remove", ID: "-rf", Device: "mini"},
+		{Kind: "remove", ID: "a b", Device: "mini"},
+		{Kind: "remove", ID: "opencode", Device: "--fleet"},
+		{Kind: "remove", ID: "opencode"},
+	} {
+		if _, _, err := linuxmiceJobArgs(bad); err == nil {
+			t.Fatalf("accepted %+v", bad)
+		}
+	}
+	if args, _, _ := linuxmiceJobArgs(LinuxMiceJobRequest{Kind: "github-mirror"}); strings.Join(args, " ") != "--yes --format json github mirror" {
+		t.Fatalf("github-mirror: %v", args)
+	}
+}

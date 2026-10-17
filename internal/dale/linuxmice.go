@@ -65,6 +65,7 @@ var linuxmiceViews = map[string][]string{
 	"modules":      {"modules", "--format", "json"},
 	"net":          {"net", "--format", "json"},
 	"checkouts":    {"checkouts", "--format", "json"},
+	"github":       {"github", "--format", "json"},
 	"fleetdiff":    {"fleet", "diff", "--format", "json"},
 	// Not served as a view: names this node for the page.
 	"integrations-local": {"integrations", "--format", "json"},
@@ -72,7 +73,10 @@ var linuxmiceViews = map[string][]string{
 
 var (
 	// Device names start alphanumeric so they can never read as flags.
-	linuxmiceDevicePattern   = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`)
+	linuxmiceDevicePattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`)
+	// A program name for lmice remove (lmice refuses the ones that keep a
+	// device reachable).
+	linuxmiceProgramPattern  = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$`)
 	linuxmiceLocationPattern = regexp.MustCompile(`^~/[^\x00-\x1f]+$`)
 	linuxmiceIDPattern       = regexp.MustCompile(`^[a-z][a-z0-9-]{0,31}$`)
 	linuxmiceServicePattern  = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9@._:-]{0,127}$`)
@@ -259,6 +263,25 @@ func (s *Server) handleLinuxMice(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		args = []string{"services", "logs", unit, "--device", device, "--lines", "200", "--format", "json"}
+	case "remove-plan":
+		// Only the plan: without --yes, lmice remove changes nothing.
+		program := query.Get("name")
+		if !linuxmiceProgramPattern.MatchString(program) {
+			writeError(w, http.StatusBadRequest, errors.New("name a program, like opencode"))
+			return
+		}
+		args = []string{"remove", program}
+		for _, device := range query["device"] {
+			if !linuxmiceDevicePattern.MatchString(device) {
+				writeError(w, http.StatusBadRequest, errors.New("invalid device"))
+				return
+			}
+			args = append(args, "--device", device)
+		}
+		if query.Get("data") == "1" {
+			args = append(args, "--with-data")
+		}
+		args = append(args, "--format", "json")
 	case "compare":
 		a, b := query.Get("a"), query.Get("b")
 		if !linuxmiceDevicePattern.MatchString(a) || !linuxmiceDevicePattern.MatchString(b) {
@@ -483,6 +506,21 @@ func linuxmiceJobArgs(req LinuxMiceJobRequest) ([]string, bool, error) {
 			return nil, false, errors.New("pick a device")
 		}
 		return []string{"--yes", "fleet", "apply", "--device", req.Device}, true, nil
+	case "github-mirror":
+		return []string{"--yes", "--format", "json", "github", "mirror"}, true, nil
+	case "github-schedule":
+		return []string{"--yes", "github", "schedule", "on"}, true, nil
+	case "remove":
+		// ID is the program, Device the device, A is "data" to move its
+		// settings and data aside too.
+		if !linuxmiceProgramPattern.MatchString(req.ID) || !linuxmiceDevicePattern.MatchString(req.Device) {
+			return nil, false, errors.New("name a program and a device")
+		}
+		args := []string{"--yes", "--format", "json", "remove", req.ID, "--device", req.Device}
+		if req.A == "data" {
+			args = append(args, "--with-data")
+		}
+		return args, true, nil
 	case "checkouts-update":
 		if req.Device == "" {
 			return []string{"--yes", "--format", "json", "checkouts", "update"}, true, nil
