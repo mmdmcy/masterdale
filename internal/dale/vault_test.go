@@ -208,3 +208,36 @@ func TestRemoveAndGithubJobsAreFixed(t *testing.T) {
 		t.Fatalf("github-mirror: %v", args)
 	}
 }
+
+func TestNewFleetJobsCheckTheirInputs(t *testing.T) {
+	good := map[string]LinuxMiceJobRequest{
+		"--yes schedules off tests --device lawnmower":                {Kind: "schedule-off", ID: "tests", Device: "lawnmower"},
+		"--yes fleet send ~/a.txt mini ~/b.txt":                       {Kind: "fleet-send", Device: "mini", A: "~/a.txt", B: "~/b.txt"},
+		"--yes fleet fetch mini ~/b.txt /tmp/a.txt":                   {Kind: "fleet-fetch", Device: "mini", A: "/tmp/a.txt", B: "~/b.txt"},
+		"--yes net add box --key " + strings.Repeat("A", 43) + "=":    {Kind: "net-add", ID: "box", A: strings.Repeat("A", 43) + "="},
+		"--yes --format json tools roll lmice":                        {Kind: "tools-roll", ID: "lmice"},
+		"--yes fleet join box --target rei@100.1.2.3 --via lawnmower": {Kind: "fleet-join", ID: "box", A: "rei@100.1.2.3", B: "lawnmower"},
+		"--yes https trust --device mini":                             {Kind: "https-trust", Device: "mini"},
+		"--yes app update t3code":                                     {Kind: "app-update", ID: "t3code"},
+	}
+	for want, req := range good {
+		args, changes, err := linuxmiceJobArgs(req)
+		if err != nil || !changes || strings.Join(args, " ") != want {
+			t.Fatalf("%+v: got %q %v %v", req, strings.Join(args, " "), changes, err)
+		}
+	}
+	for _, bad := range []LinuxMiceJobRequest{
+		{Kind: "schedule-on", ID: "rm"},
+		{Kind: "fleet-send", Device: "mini", A: "relative", B: "~/b"},
+		{Kind: "fleet-send", Device: "mini", A: "~/../etc/passwd", B: "~/b"},
+		{Kind: "fleet-fetch", Device: "-x", A: "~/a", B: "~/b"},
+		{Kind: "net-add", ID: "box", A: "short"},
+		{Kind: "net-add", ID: "box", A: strings.Repeat("A", 43) + "=", B: "not-an-ip"},
+		{Kind: "tools-roll", ID: "--all"},
+		{Kind: "fleet-join", ID: "box", A: "-oProxyCommand=x"},
+	} {
+		if _, _, err := linuxmiceJobArgs(bad); err == nil {
+			t.Fatalf("accepted %+v", bad)
+		}
+	}
+}

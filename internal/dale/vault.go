@@ -314,6 +314,64 @@ func (s *Server) handleVault(w http.ResponseWriter, r *http.Request) {
 		}
 		w.Header().Set("Cache-Control", "no-store")
 		writeJSON(w, http.StatusOK, map[string]string{"value": string(out)})
+	case "find":
+		// Every settings file in the fleet that sets KEY (paths only);
+		// with add, they become places the secret is copied to.
+		var req struct {
+			vaultRef
+			Key string `json:"key"`
+			Add bool   `json:"add"`
+		}
+		if err := json.NewDecoder(body).Decode(&req); err != nil {
+			writeError(w, http.StatusBadRequest, errors.New("invalid request"))
+			return
+		}
+		req.vaultRef.Field = ""
+		spec, err := req.vaultRef.spec()
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err)
+			return
+		}
+		if !vaultEnvKeyPattern.MatchString(req.Key) {
+			writeError(w, http.StatusBadRequest, errors.New("the key is a settings name like DALE_TOKEN"))
+			return
+		}
+		args := []string{"vault", "find", spec, "--key", req.Key}
+		if req.Add {
+			args = append([]string{"--yes"}, append(args, "--add")...)
+		}
+		out, errOut, err := runLmice(r.Context(), args, nil, req.Add, 5*time.Minute)
+		if err != nil && len(bytes.TrimSpace(out)) == 0 {
+			writeError(w, http.StatusBadGateway, lmiceError(errOut, err))
+			return
+		}
+		if req.Add {
+			s.linuxmice.mu.Lock()
+			s.linuxmice.entries = nil
+			s.linuxmice.mu.Unlock()
+		}
+		writeJSON(w, http.StatusOK, map[string]string{"detail": strings.TrimSpace(string(out))})
+	case "rotate-client":
+		// A new secret for a sign-in client of this machine's identity
+		// server, written into its settings file; it is never shown.
+		var req struct {
+			Client  string `json:"client"`
+			Key     string `json:"key"`
+			Service string `json:"service"`
+		}
+		if err := json.NewDecoder(body).Decode(&req); err != nil {
+			writeError(w, http.StatusBadRequest, errors.New("invalid request"))
+			return
+		}
+		if !vaultClientPattern.MatchString(req.Client) || !vaultEnvKeyPattern.MatchString(req.Key) || (req.Service != "" && !vaultClientPattern.MatchString(req.Service)) {
+			writeError(w, http.StatusBadRequest, errors.New("name the client, the settings key and optionally the service"))
+			return
+		}
+		args := []string{"--yes", "vault", "rotate-client", req.Client, "--key", req.Key, "--format", "json"}
+		if req.Service != "" {
+			args = append(args, "--service", req.Service)
+		}
+		s.vaultChange(w, r, args, nil)
 	case "decide":
 		// The Vault tab's own Allow/Deny: the signed-in session is the
 		// authorisation (lmice accepts "-" for the code only from Masterdale).
@@ -330,6 +388,13 @@ func (s *Server) handleVault(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, errors.New("unknown vault action"))
 	}
 }
+
+var (
+	// A settings (environment) name, such as DALE_TOKEN.
+	vaultEnvKeyPattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]{0,127}$`)
+	// A sign-in client id or a systemd service name.
+	vaultClientPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._@-]{0,127}$`)
+)
 
 func (s *Server) vaultChange(w http.ResponseWriter, r *http.Request, args []string, stdin []byte) {
 	out, errOut, err := runLmice(r.Context(), args, stdin, true, 5*time.Minute)

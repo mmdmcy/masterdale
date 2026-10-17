@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -66,6 +67,9 @@ var linuxmiceViews = map[string][]string{
 	"net":          {"net", "--format", "json"},
 	"checkouts":    {"checkouts", "--format", "json"},
 	"github":       {"github", "--format", "json"},
+	"servers":      {"servers", "--format", "json"},
+	"tests":        {"tests", "--format", "json"},
+	"apps":         {"app", "list", "--format", "json"},
 	"fleetdiff":    {"fleet", "diff", "--format", "json"},
 	// Not served as a view: names this node for the page.
 	"integrations-local": {"integrations", "--format", "json"},
@@ -79,6 +83,15 @@ var (
 	linuxmiceProgramPattern  = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$`)
 	linuxmiceLocationPattern = regexp.MustCompile(`^~/[^\x00-\x1f]+$`)
 	linuxmiceIDPattern       = regexp.MustCompile(`^[a-z][a-z0-9-]{0,31}$`)
+	// An absolute or home path, no control characters, not a flag.
+	linuxmicePathPattern = regexp.MustCompile(`^(/|~/)[^\x00-\x1f]{0,1000}$`)
+	// A WireGuard public key (base64 of 32 bytes).
+	linuxmiceWireGuardKeyPattern = regexp.MustCompile(`^[A-Za-z0-9+/]{42}[AEIMQUYcgkosw048]=$`)
+	// A tool or application name (lmice tools / app ids).
+	linuxmiceToolPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{0,63}$`)
+	// USER@HOST for joining a device.
+	linuxmiceTargetPattern   = regexp.MustCompile(`^[a-z_][a-z0-9_-]{0,31}@[A-Za-z0-9][A-Za-z0-9.:-]{0,252}$`)
+	linuxmiceScheduleNames   = map[string]bool{"attention": true, "backups": true, "github": true, "tests": true, "fleet": true, "https": true}
 	linuxmiceServicePattern  = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9@._:-]{0,127}$`)
 	linuxmiceUpstreamPattern = regexp.MustCompile(`^http://[0-9]{1,3}(\.[0-9]{1,3}){3}:[0-9]{1,5}$`)
 )
@@ -246,15 +259,19 @@ func (s *Server) handleLinuxMice(w http.ResponseWriter, r *http.Request) {
 			args = append(args, "--patch")
 		}
 		args = append(args, "--format", "json")
-	case "services", "ports", "display", "windows":
+	case "services", "ports", "display", "windows", "schedules", "inventory", "windows-space":
 		// Without a device, lmice answers for the machine Masterdale runs on.
-		args = []string{name, "--format", "json"}
+		command := map[string][]string{"windows-space": {"windows", "space"}}[name]
+		if command == nil {
+			command = []string{name}
+		}
+		args = append(append([]string{}, command...), "--format", "json")
 		if device := query.Get("device"); device != "" {
 			if !linuxmiceDevicePattern.MatchString(device) {
 				writeError(w, http.StatusBadRequest, errors.New("invalid device"))
 				return
 			}
-			args = []string{name, "--device", device, "--format", "json"}
+			args = append(append([]string{}, command...), "--device", device, "--format", "json")
 		}
 	case "logs":
 		device, unit := query.Get("device"), query.Get("name")
@@ -529,6 +546,72 @@ func linuxmiceJobArgs(req LinuxMiceJobRequest) ([]string, bool, error) {
 			return nil, false, errors.New("pick a device")
 		}
 		return []string{"--yes", "--format", "json", "checkouts", "update", "--device", req.Device}, true, nil
+	case "schedule-on", "schedule-off":
+		// ID is the schedule (attention, backups, github, tests, fleet, https).
+		if !linuxmiceScheduleNames[req.ID] {
+			return nil, false, errors.New("pick a schedule")
+		}
+		args := []string{"--yes", "schedules", strings.TrimPrefix(req.Kind, "schedule-"), req.ID}
+		if req.Device != "" {
+			if !linuxmiceDevicePattern.MatchString(req.Device) {
+				return nil, false, errors.New("pick a device")
+			}
+			args = append(args, "--device", req.Device)
+		}
+		return args, true, nil
+	case "fleet-send", "fleet-fetch":
+		// A is the path on this machine, B the path on Device; neither
+		// command overwrites anything.
+		if !linuxmiceDevicePattern.MatchString(req.Device) || !linuxmicePathPattern.MatchString(req.A) || !linuxmicePathPattern.MatchString(req.B) || strings.Contains(req.A+"/"+req.B, "/../") {
+			return nil, false, errors.New("pick a device and two paths (absolute or ~/...)")
+		}
+		if req.Kind == "fleet-send" {
+			return []string{"--yes", "fleet", "send", req.A, req.Device, req.B}, true, nil
+		}
+		return []string{"--yes", "fleet", "fetch", req.Device, req.B, req.A}, true, nil
+	case "net-add":
+		// ID is the name, A the WireGuard public key, B an optional address.
+		if !linuxmiceDevicePattern.MatchString(req.ID) || !linuxmiceWireGuardKeyPattern.MatchString(req.A) || (req.B != "" && net.ParseIP(req.B).To4() == nil) {
+			return nil, false, errors.New("give a name, the device's public key and optionally an address")
+		}
+		args := []string{"--yes", "net", "add", req.ID, "--key", req.A}
+		if req.B != "" {
+			args = append(args, "--address", req.B)
+		}
+		return args, true, nil
+	case "net-policy":
+		return []string{"--yes", "net", "policy"}, true, nil
+	case "tools-roll":
+		if !linuxmiceToolPattern.MatchString(req.ID) {
+			return nil, false, errors.New("pick a tool")
+		}
+		return []string{"--yes", "--format", "json", "tools", "roll", req.ID}, true, nil
+	case "tests-run":
+		return []string{"--yes", "--format", "json", "tests", "run"}, true, nil
+	case "app-update":
+		if !linuxmiceToolPattern.MatchString(req.ID) {
+			return nil, false, errors.New("pick an application")
+		}
+		return []string{"--yes", "app", "update", req.ID}, true, nil
+	case "backups-verify":
+		return []string{"--yes", "--format", "json", "backups", "verify"}, true, nil
+	case "attention-notify":
+		return []string{"--yes", "attention", "notify"}, true, nil
+	case "https-trust", "https-names":
+		if !linuxmiceDevicePattern.MatchString(req.Device) {
+			return nil, false, errors.New("pick a device")
+		}
+		return []string{"--yes", "https", strings.TrimPrefix(req.Kind, "https-"), "--device", req.Device}, true, nil
+	case "fleet-join":
+		// ID is the new device's name, A its USER@HOST, B an optional jump.
+		if !linuxmiceDevicePattern.MatchString(req.ID) || !linuxmiceTargetPattern.MatchString(req.A) || (req.B != "" && !linuxmiceDevicePattern.MatchString(req.B)) {
+			return nil, false, errors.New("give a name and USER@HOST")
+		}
+		args := []string{"--yes", "fleet", "join", req.ID, "--target", req.A}
+		if req.B != "" {
+			args = append(args, "--via", req.B)
+		}
+		return args, true, nil
 	case "net-join":
 		if !linuxmiceDevicePattern.MatchString(req.Device) {
 			return nil, false, errors.New("pick a device")
