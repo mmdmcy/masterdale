@@ -209,6 +209,7 @@
     <button data-tab="display" type="button">Display</button>
     <button data-tab="windows" type="button">Windows</button>
     <button data-tab="net" type="button">Network</button>
+    <button data-tab="checkouts" type="button">Checkouts</button>
     <button data-tab="fleetfile" type="button">Fleet file</button>
     <button data-tab="modules" type="button">Modules</button>
     <button data-tab="rescue" type="button">Recovery</button>
@@ -360,7 +361,7 @@
         $("view").innerHTML = `<div class="empty">${esc(view?.error || view?.hint || "No data")}</div>`;
         return;
       }
-      ({ attention: renderAttention, repos: renderRepos, folders: renderFolders, devices: renderDevices, move: renderMove, upkeep: renderUpkeep, agents: renderAgents, projects: renderProjects, tools: renderTools, setup: renderSetup, integrations: renderIntegrations, selfhost: renderSelfhost, backups: renderBackups, https: renderHttps, hardware: renderHardware, fleetfile: renderFleetFile, modules: renderModules, net: renderNet, org: renderOrg, rescue: renderRescue })[state.tab](view.data);
+      ({ attention: renderAttention, repos: renderRepos, folders: renderFolders, devices: renderDevices, move: renderMove, upkeep: renderUpkeep, agents: renderAgents, projects: renderProjects, tools: renderTools, setup: renderSetup, integrations: renderIntegrations, selfhost: renderSelfhost, backups: renderBackups, https: renderHttps, hardware: renderHardware, fleetfile: renderFleetFile, modules: renderModules, net: renderNet, checkouts: renderCheckouts, org: renderOrg, rescue: renderRescue })[state.tab](view.data);
     }
 
     function renderAttention(data) {
@@ -722,6 +723,18 @@
         `<p class="muted">Plugroot owns these services; manage them with <code>plugroot</code> on the device.</p>`;
     }
 
+    function renderCheckouts(data) {
+      const canChange = state.caps?.actions_enabled;
+      const level = (c) => c === "current" ? "ok" : c === "behind" ? "warn" : c === "unreachable" || c === "missing" ? "critical" : "unknown";
+      const rows = data.checkouts.map((c) => `<tr><td>${esc(c.device)}</td><td class="mono">${esc(c.entry)}</td><td>${pill(level(c.state))} <span class="muted">${esc(c.state)}</span></td><td class="detail">${esc(c.detail)}${c.upstream ? `<br><span class="muted">newest: ${esc(c.upstream)}</span>` : ""}</td><td>${c.state === "behind" && !c.changed ? `<button data-checkout-update="${esc(c.device)}" type="button" ${canChange ? "" : "disabled"}>Update…</button>` : ""}</td></tr>`).join("");
+      const behind = data.checkouts.some((c) => c.state === "behind" && !c.changed);
+      $("cards").innerHTML = `<div class="card"><strong>Checkouts</strong><span>${esc(data.detail)}</span></div>`;
+      $("view").innerHTML = `<div class="scroll"><table><thead><tr><th>Device</th><th>Checkout</th><th>State</th><th>Detail</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>
+        <div class="panel"><p>Git checkouts the fleet file keeps up to date, on each device and on the Windows side of WSL devices. Updating only fast-forwards: never over local changes or local commits. A browser extension loaded from a checkout picks up the new version when it is reloaded.</p>
+        <button data-checkout-update="" type="button" ${canChange && behind ? "" : "disabled"}>Update all that are behind…</button>
+        <p><code>lmice checkouts</code> · <code>lmice checkouts update [--device D]</code> · add <code>checkouts = ["~/path", "windows:~/path"]</code> to a device in the fleet file</p></div>`;
+    }
+
     function renderNet(data) {
       const canChange = state.caps?.actions_enabled;
       const age = (s) => s == null ? "never connected" : s < 120 ? `${s} s ago` : s < 7200 ? `${Math.floor(s / 60)} min ago` : s < 172800 ? `${Math.floor(s / 3600)} h ago` : `${Math.floor(s / 86400)} days ago`;
@@ -834,7 +847,7 @@
     }
 
     // Pages that belong to a module; they hide when it is off here.
-    const MODULE_TABS = { workspace: ["repos", "folders", "move", "projects"], agents: ["agents"], org: ["org"], inventory: ["hardware", "compare"], servers: ["selfhost"], backups: ["backups"], https: ["https"], display: ["display"], windows: ["windows"], net: ["net"], vault: ["vault"], integrations: ["integrations"] };
+    const MODULE_TABS = { workspace: ["repos", "folders", "move", "projects", "checkouts"], agents: ["agents"], org: ["org"], inventory: ["hardware", "compare"], servers: ["selfhost"], backups: ["backups"], https: ["https"], display: ["display"], windows: ["windows"], net: ["net"], vault: ["vault"], integrations: ["integrations"] };
     async function hideOffModules() {
       try {
         const view = await api("/v1/linuxmice/modules");
@@ -1290,6 +1303,7 @@
       modules: ["Modules", "LinuxMice is a small core plus building blocks. Switch a block off and its commands, checks, timer and pages disappear on this machine; nothing is deleted."],
       fleetfile: ["Fleet file", "Every machine, what it is for and what it runs, in one file. With it and last night's backup, any of them can be rebuilt on a fresh machine."],
       services: ["Services", "Everything that runs on a machine: system and user services, timers and containers. Read a service's logs or restart it."],
+      checkouts: ["Checkouts", "Git checkouts kept up to date across devices, including the Windows side of WSL laptops: what is behind, and a safe update."],
       net: ["Network", "LinuxMice's own network (WireGuard through a hub): who is on it, when each last connected, and adding or removing a device without Tailscale."],
       windows: ["Windows", "Windows laptops through their LinuxMice WSL device: version, updates, security, GPU heat, memory, what starts with Windows."],
       display: ["Display", "A virtual screen so remote desktop works on a machine without a monitor, and which outputs have a screen now."],
@@ -1389,6 +1403,15 @@
           } catch (error) { $("meta").textContent = `failed: ${error.message}`; return; }
           state.views.changes = null;
           load(true);
+        });
+        return;
+      }
+      const checkoutUpdate = event.target.closest("button[data-checkout-update]");
+      if (checkoutUpdate) {
+        const device = checkoutUpdate.dataset.checkoutUpdate;
+        askConfirm(`lmice checkouts update${device ? ` --device ${device}` : ""}`, "Fast-forwards checkouts that are behind and have no local changes or local commits.", async () => {
+          try { const job = await startJob({ kind: "checkouts-update", device }); if (job.view?.data) state.views.checkouts = job.view; $("meta").textContent = job.state === "done" ? "updated" : `failed: ${job.view?.error || ""}`; } catch (error) { $("meta").textContent = `failed: ${error.message}`; }
+          render();
         });
         return;
       }

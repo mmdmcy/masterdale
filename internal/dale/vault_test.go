@@ -157,3 +157,13 @@ func TestNetJobsTakeOnlyPlainNames(t *testing.T) {
 		t.Fatal("a flag must not pass as a member")
 	}
 }
+
+func TestCheckoutUpdateJobTakesAnOptionalPlainDevice(t *testing.T) {
+	args, changes, err := linuxmiceJobArgs(LinuxMiceJobRequest{Kind: "checkouts-update"})
+	if err != nil || !changes || strings.Join(args, " ") != "--yes --format json checkouts update" {
+		t.Fatalf("all: %v %v %v", args, changes, err)
+	}
+	if _, _, err := linuxmiceJobArgs(LinuxMiceJobRequest{Kind: "checkouts-update", Device: "--all"}); err == nil {
+		t.Fatal("a flag must not pass as a device")
+	}
+}

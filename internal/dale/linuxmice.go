@@ -64,6 +64,7 @@ var linuxmiceViews = map[string][]string{
 	"fleetfile":    {"fleet", "file", "--format", "json"},
 	"modules":      {"modules", "--format", "json"},
 	"net":          {"net", "--format", "json"},
+	"checkouts":    {"checkouts", "--format", "json"},
 	"fleetdiff":    {"fleet", "diff", "--format", "json"},
 	// Not served as a view: names this node for the page.
 	"integrations-local": {"integrations", "--format", "json"},
@@ -478,6 +479,14 @@ func linuxmiceJobArgs(req LinuxMiceJobRequest) ([]string, bool, error) {
 			return nil, false, errors.New("pick a device")
 		}
 		return []string{"--yes", "fleet", "apply", "--device", req.Device}, true, nil
+	case "checkouts-update":
+		if req.Device == "" {
+			return []string{"--yes", "--format", "json", "checkouts", "update"}, true, nil
+		}
+		if !linuxmiceDevicePattern.MatchString(req.Device) {
+			return nil, false, errors.New("pick a device")
+		}
+		return []string{"--yes", "--format", "json", "checkouts", "update", "--device", req.Device}, true, nil
 	case "net-join":
 		if !linuxmiceDevicePattern.MatchString(req.Device) {
 			return nil, false, errors.New("pick a device")
