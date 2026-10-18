@@ -5,6 +5,26 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="referrer" content="no-referrer">
   <title>Sign in to LinuxMice</title>
+  <script>
+    // Scale with the screen: past 1440 px wide everything grows (up to
+    // 1.8x), so a big or sharp screen is not miniscule; A- / A+ adjust on
+    // top of that, remembered per browser.
+    (function () {
+      var KEY = "linuxmice.size";
+      function own() { try { return parseFloat(localStorage.getItem(KEY)) || 1; } catch (_) { return 1; } }
+      function apply() {
+        var auto = Math.min(Math.max(window.innerWidth / 1440, 1), 1.8);
+        document.documentElement.style.zoom = String(Math.round(auto * own() * 100) / 100);
+      }
+      window.linuxmiceSize = function (step) {
+        var size = step ? Math.min(Math.max(own() + step, 0.7), 1.6) : 1;
+        try { localStorage.setItem(KEY, String(Math.round(size * 10) / 10)); } catch (_) {}
+        apply();
+      };
+      apply();
+      window.addEventListener("resize", apply);
+    })();
+  </script>
   <style>
     /* The fleet page's look (NERV orange, MAGI green readouts, title-card
        serif, hazard stripe), no fonts or images to load. */

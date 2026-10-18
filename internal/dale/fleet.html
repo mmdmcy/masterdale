@@ -3,7 +3,27 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>LinuxMice Fleet</title>
+  <title>LinuxMice</title>
+  <script>
+    // Scale with the screen: past 1440 px wide everything grows (up to
+    // 1.8x), so a big or sharp screen is not miniscule; A- / A+ adjust on
+    // top of that, remembered per browser.
+    (function () {
+      var KEY = "linuxmice.size";
+      function own() { try { return parseFloat(localStorage.getItem(KEY)) || 1; } catch (_) { return 1; } }
+      function apply() {
+        var auto = Math.min(Math.max(window.innerWidth / 1440, 1), 1.8);
+        document.documentElement.style.zoom = String(Math.round(auto * own() * 100) / 100);
+      }
+      window.linuxmiceSize = function (step) {
+        var size = step ? Math.min(Math.max(own() + step, 0.7), 1.6) : 1;
+        try { localStorage.setItem(KEY, String(Math.round(size * 10) / 10)); } catch (_) {}
+        apply();
+      };
+      apply();
+      window.addEventListener("resize", apply);
+    })();
+  </script>
   <style>
     /* Look: Evangelion-style operations screens (NERV orange on black, MAGI
        green readouts, alert red, hazard stripes, angular panels). Pure CSS,
@@ -190,8 +210,8 @@
 </head>
 <body>
   <header>
-    <h1>LinuxMice Fleet<small>MAGI SYSTEM · ALL DEVICES</small></h1>
-    <span class="muted"><a href="/dashboard">Dashboard</a> <button id="modeToggle" class="mode-toggle" type="button" title="Display mode: auto (night after 21:00), night, normal">◐ Auto</button></span>
+    <h1>LinuxMice<small>MAGI SYSTEM · ALL DEVICES</small></h1>
+    <span class="muted"><button type="button" class="mode-toggle" onclick="linuxmiceSize(-0.1)" title="Smaller text" aria-label="Smaller text">A−</button> <button type="button" class="mode-toggle" onclick="linuxmiceSize(0.1)" title="Larger text" aria-label="Larger text">A+</button> <button id="modeToggle" class="mode-toggle" type="button" title="Display mode: auto (night after 21:00), night, normal">◐ Auto</button></span>
   </header>
   <div class="shell">
   <nav class="tabs" id="tabs" aria-label="Pages">
@@ -804,7 +824,8 @@
       $("cards").innerHTML = `<div class="card"><strong>Accounts</strong><span>${esc(data.detail)}</span></div>`;
       $("view").innerHTML = `<div id="browsers"><div class="panel muted">loading browsers…</div></div>` +
         `<div class="panel"><h3>Password sign-in</h3><p class="muted">The other way in, for a browser on a device that has no LinuxMice: email and password at “Sign in with email and password”.</p>` +
-        data.users.map((u) => `<p><code>${esc(u.email)}</code>${u.admin ? " (admin)" : ""}${u.enabled ? "" : ", disabled"}; last password sign-in ${esc(u.last_sign_in ? new Date(u.last_sign_in).toLocaleString() : "never")}${u.authenticator === "on" ? "; asks for an authenticator code" : ""}</p>
+        data.users.map((u) => `<p><b>${esc(u.name || u.email)}</b>: <code>${esc(u.email)}</code>${(u.aliases || []).length ? ` <span class="muted">(also ${u.aliases.map(esc).join(", ")})</span>` : ""}${u.admin ? " (admin)" : ""}${u.enabled ? "" : ", disabled"}; last password sign-in ${esc(u.last_sign_in ? new Date(u.last_sign_in).toLocaleString() : "never")}${u.authenticator === "on" ? "; asks for an authenticator code" : ""}</p>
+        <form class="vault-form" data-identity-email="${esc(u.email)}"><label>New email <input name="new_email" type="email" required placeholder="you@example.com"></label><label>Name <input name="name" value="${esc(u.name || "")}"></label><div class="toolbar"><button type="submit" ${dis}>Change email…</button><span class="muted" role="status">The old address keeps signing in; apps keep knowing you.</span></div></form>
         <details><summary>Optional: an authenticator app or recovery codes for this account</summary>
         <p class="muted">Only for the password sign-in. Signing in from your own devices never needs it.</p>
         <div class="toolbar">${u.authenticator === "on"
@@ -1353,6 +1374,18 @@
       } catch (error) { vaultMessage(`Not copied: ${error.message}`); }
     }
     $("view").addEventListener("submit", async (event) => {
+      const emailForm = event.target.closest("form[data-identity-email]");
+      if (emailForm) {
+        event.preventDefault();
+        const email = emailForm.dataset.identityEmail, f = new FormData(emailForm), status = emailForm.querySelector("[role=status]");
+        const next = String(f.get("new_email") || "").trim(), name = String(f.get("name") || "").trim();
+        askConfirm(`lmice identity email --email ${email} --new-email ${next}${name ? ` --name "${name}"` : ""}`, `Signs in as ${next} from now on; ${email} keeps working too. Apps keep knowing you.`, async () => {
+          status.textContent = "changing…";
+          try { const r = await api("/v1/linuxmice/identity/email", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, new_email: next, name }) }); status.textContent = r.detail || "changed"; state.views.identity = null; setTimeout(() => load(true), 1500); }
+          catch (error) { status.textContent = `not changed: ${error.message}`; }
+        });
+        return;
+      }
       if (state.tab === "vault" && event.target.id === "vaultFind") { event.preventDefault(); findForVault(false); return; }
       if (state.tab === "vault" && event.target.id === "vaultClient") { event.preventDefault(); rotateClient(event.target); return; }
       if (state.tab !== "vault" || event.target.id !== "vaultTarget") return;
@@ -1534,7 +1567,7 @@
       });
       $("pageTitle").textContent = PAGES[tab][0];
       $("pageLead").textContent = PAGES[tab][1];
-      document.title = `${PAGES[tab][0]} · LinuxMice Fleet`;
+      document.title = `${PAGES[tab][0]} · LinuxMice`;
       if (push && location.hash !== `#${tab}`) history.pushState(null, "", `#${tab}`);
       if (tab === "selfhost") fillHostDevices();
       load(false);

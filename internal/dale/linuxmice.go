@@ -961,7 +961,7 @@ func (s *Server) handleIdentityAction(w http.ResponseWriter, r *http.Request, ac
 		return
 	}
 	if !s.signedIn(r) {
-		writeError(w, http.StatusForbidden, errors.New("sign-in changes need you signed in to Masterdale (a device token or a local request is not enough)"))
+		writeError(w, http.StatusForbidden, errors.New("sign-in changes need a signed-in browser (a device token or a local request is not enough)"))
 		return
 	}
 	if !LinuxMiceActionsEnabled() {
@@ -969,8 +969,10 @@ func (s *Server) handleIdentityAction(w http.ResponseWriter, r *http.Request, ac
 		return
 	}
 	var req struct {
-		Email string `json:"email"`
-		Code  string `json:"code"`
+		Email    string `json:"email"`
+		Code     string `json:"code"`
+		NewEmail string `json:"new_email"`
+		Name     string `json:"name"`
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<10)).Decode(&req); err != nil || !identityEmailPattern.MatchString(req.Email) {
 		writeError(w, http.StatusBadRequest, errors.New("give the account's email"))
@@ -991,6 +993,19 @@ func (s *Server) handleIdentityAction(w http.ResponseWriter, r *http.Request, ac
 		args = []string{"--yes", "identity", "authenticator", "off", "--email", req.Email}
 	case "recovery-codes":
 		args = []string{"--yes", "--format", "json", "identity", "recovery-codes", "--email", req.Email}
+	case "email":
+		if !identityEmailPattern.MatchString(req.NewEmail) {
+			writeError(w, http.StatusBadRequest, errors.New("give the new email address"))
+			return
+		}
+		args = []string{"--yes", "identity", "email", "--email", req.Email, "--new-email", req.NewEmail}
+		if name := strings.TrimSpace(req.Name); name != "" {
+			if len(name) > 200 || strings.ContainsAny(name, "\n\r'") {
+				writeError(w, http.StatusBadRequest, errors.New("a name is up to 200 characters on one line"))
+				return
+			}
+			args = append(args, "--name", name)
+		}
 	default:
 		writeError(w, http.StatusNotFound, errors.New("unknown sign-in action"))
 		return
