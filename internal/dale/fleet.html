@@ -94,6 +94,7 @@
     .vault-table td.actions .toolbar { margin: 0; justify-content: flex-end; }
     .vault-table td.actions button { white-space: nowrap; }
     .vault-switch button.active { border-color: var(--accent); color: var(--accent); }
+    .vault-table button.active { border-color: var(--ok); color: var(--ok); }
     .meta { color: var(--muted); font-size: 12px; margin-bottom: 10px; word-break: break-word; }
     code, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
     .cards { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
@@ -1238,6 +1239,12 @@
       state.vault.timer = setTimeout(() => { if (state.tab === "vault") loadVault(true); }, 10000);
     }
     function vaultEntry(name) { return state.vault.data?.entries.find((e) => e.vault === state.vault.which && e.name === name); }
+    const VAULT_USES = [
+      ["http", "Web", "LinuxMice makes web requests to its sites with it; the agent sees only the answer"],
+      ["fill", "Fill", "Typed into the login form on its own sites (agent desktops)"],
+      ["code", "Code", "The current one-time code"],
+      ["run", "Command", "Given to one command, which can read it"],
+    ];
     function renderVault() {
       const v = state.vault, d = v.data;
       ["verdict", "search", "hostDevice"].forEach((id) => { $(id).style.display = "none"; });
@@ -1253,6 +1260,7 @@
       const rows = entries.map((e) => `<tr><td><b>${esc(e.name)}</b><br><span class="muted">${esc(e.kind)}${e.ask ? ", asks first" : ""}${e.changed ? `, changed ${esc(e.changed)}` : ""}</span></td>
         <td>${e.user ? `${esc(e.user)} <button data-vault-copy-user="${esc(e.name)}" type="button" title="Copy the user name">Copy</button>` : '<span class="muted">none</span>'}</td>
         <td class="detail">${(e.domains || []).length ? esc(e.domains.join(", ")) : '<span class="muted">no sites, so agents never fill it</span>'}</td>
+        <td><div class="toolbar">${VAULT_USES.map(([use, label, tip]) => `<button class="${(e.agents_may || []).includes(use) ? "active" : ""}" data-vault-use="${use}" data-name="${esc(e.name)}" type="button" title="${esc(tip)}" ${canChange ? "" : "disabled"}>${label}</button>`).join("")}</div></td>
         <td class="actions"><div class="toolbar"><button class="primary" data-vault-copy="${esc(e.name)}" type="button">Copy password</button><button data-vault-show="${esc(e.name)}" type="button" title="Show it here for 30 seconds">Show</button>${e.has_totp ? `<button data-vault-code="${esc(e.name)}" type="button">Copy code</button>` : ""}<button data-vault-edit="${esc(e.name)}" type="button">Edit</button></div></td></tr>`).join("");
       const changes = state.views.changes?.data?.changes || [];
       const uses = changes.filter((c) => /vault/.test(`${c.action} ${c.change || ""} ${c.command || ""}`)).slice(0, 12);
@@ -1262,14 +1270,15 @@
           <input id="vaultFilter" type="search" placeholder="Find a login" aria-label="Find a login" value="${esc(v.filter)}">
           <button class="primary" data-vault-new type="button" ${canChange ? "" : "disabled"}>Add login</button>
           <span class="muted" id="vaultMessage" role="status">${esc(v.message)}</span></div>` +
+        `<div class="toolbar vault-switch"><span class="muted">Agents and the ${esc(v.which)} vault:</span>${[["use", "Use it"], ["ask", "Ask me each time"], ["never", "Never"]].map(([p, label]) => `<button data-vault-agents="${p}" class="${(d.agents || {})[v.which] === p ? "active" : ""}" type="button" ${canChange ? "" : "disabled"}>${label}</button>`).join("")}</div>` +
         `<div class="panel" id="vaultShown" hidden></div>` +
         (v.editing ? vaultEditor() : "") +
-        (rows ? `<div class="scroll"><table class="vault-table"><thead><tr><th>Login</th><th>User</th><th>Sites</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`
+        (rows ? `<div class="scroll"><table class="vault-table"><thead><tr><th>Login</th><th>User</th><th>Sites</th><th>Agents may</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`
               : `<div class="empty">${text ? "No login matches." : `The ${esc(v.which)} vault is empty. Add the logins you and your agents use for ${purpose}.`}</div>`) +
         `<h3>Recent use</h3>` + (uses.length ? `<div class="scroll"><table><tbody>${uses.map((c) => `<tr><td class="muted">${esc(new Date(c.at * 1000).toLocaleString())}</td><td>${esc((c.change || c.command || c.action).replace(/\?$/, ""))}</td><td class="muted">${esc(c.via || "")}</td></tr>`).join("")}</tbody></table></div>` : `<p class="muted">${state.views.changes ? "Nothing yet. Every add, change and use is recorded here." : "Reading the change log…"}</p>`) +
         `<div class="panel"><h3>Sign-in client secrets</h3><p class="muted">The secret an app (like Masterdale) uses with this machine's identity server. Rotating writes a new one into the app's settings file and restarts the app; nobody sees it.</p>
           <form class="vault-form" id="vaultClient"><label>Client <input name="client" required placeholder="masterdale"></label><label>Variable <input name="key" required placeholder="DALE_OIDC_CLIENT_SECRET"></label><label>Service (optional) <input name="service" placeholder="masterdale"></label><div class="toolbar"><button type="submit" ${canChange ? "" : "disabled"}>Rotate…</button><span class="muted" id="vaultClientMessage" role="status"></span></div></form></div>` +
-        `<div class="panel"><p>Agents use a login by name and never see the value: <code>lmice vault run</code> for commands, and the <b>fill</b> tool in their desktops, which types only on the login's own sites. Every use is recorded. Each vault has its own key; the backup key on the Mac can read all three.</p></div>`;
+        `<div class="panel"><p>Agents use a login by name and never see the value. <b>Web</b>: LinuxMice makes the request to the login's own sites and gives the agent only the answer (<code>lmice vault http</code>). <b>Fill</b>: typed into the login form on its own sites, in agent desktops. <b>Code</b>: the current one-time code. <b>Command</b>: the value goes into one command, which can read it, so it is off unless you turn it on. Personal, katteke and work are separate, each with its own key; the backup key on the Mac can read all three. Every use is recorded.</p></div>`;
       const filter = $("vaultFilter");
       filter.addEventListener("input", () => { v.filter = filter.value; const at = filter.selectionStart; renderVault(); const again = $("vaultFilter"); again.focus(); again.setSelectionRange(at, at); });
       const form = $("vaultForm");
@@ -1474,6 +1483,28 @@
       if (!b) return;
       if (b.dataset.vaultWhich) { v.which = b.dataset.vaultWhich; v.editing = null; v.message = ""; renderVault(); return; }
       if (b.dataset.vaultShow) { showFromVault(b.dataset.vaultShow); return; }
+      if (b.dataset.vaultUse) {
+        const e = vaultEntry(b.dataset.name) || {}, use = b.dataset.vaultUse;
+        const now = new Set(e.agents_may || []);
+        if (now.has(use)) now.delete(use); else now.add(use);
+        const apply = async () => {
+          vaultMessage("Saving…");
+          try { const r = await vaultAction("uses", { vault: v.which, name: b.dataset.name, uses: [...now] }); vaultMessage(r.detail || "Saved."); }
+          catch (error) { vaultMessage(`Not saved: ${error.message}`); return; }
+          await loadVault(true); renderVault();
+        };
+        if (use === "run" && now.has("run")) askConfirm(`lmice vault uses ${v.which}/${b.dataset.name} ${[...now].join(",")}`, "Agents may then give this secret to a command, and that command can read it. Web, fill and code never show it.", apply);
+        else apply();
+        return;
+      }
+      if (b.dataset.vaultAgents) {
+        const policy = b.dataset.vaultAgents;
+        askConfirm(`lmice vault agents ${v.which} ${policy}`, policy === "never" ? `Agents can no longer use anything in the ${v.which} vault.` : policy === "ask" ? `Every agent use of the ${v.which} vault waits for your Allow (phone or here).` : `Agents may use the ${v.which} vault as each secret allows.`, async () => {
+          try { const r = await vaultAction("agents", { vault: v.which, policy }); vaultMessage(r.detail || "Saved."); } catch (error) { vaultMessage(`Not saved: ${error.message}`); return; }
+          await loadVault(true); renderVault();
+        });
+        return;
+      }
       if (b.hasAttribute("data-vault-hide")) { const box = $("vaultShown"); box.hidden = true; box.innerHTML = ""; return; }
       if (b.hasAttribute("data-vault-find-add")) { askConfirm(`lmice vault find ${v.which}/${v.editing} --key ${$("vaultFind").elements.key.value} --add`, "Every settings file found becomes a place this secret is written to when you push or rotate it.", () => findForVault(true)); return; }
       if (b.hasAttribute("data-vault-new")) { v.editing = "new"; v.message = ""; renderVault(); $("vaultForm")?.elements.name.focus(); return; }

@@ -158,7 +158,7 @@ func (s *Server) handleVault(w http.ResponseWriter, r *http.Request) {
 	// A person, signed in: not the device token and not a local request,
 	// which every program on this machine (an agent too) could make.
 	if !s.signedIn(r) {
-		writeError(w, http.StatusForbidden, errors.New("vault actions need you signed in to Masterdale (a device token or a local request is not enough)"))
+		writeError(w, http.StatusForbidden, errors.New("vault actions need a signed-in browser (a device token or a local request is not enough)"))
 		return
 	}
 	if !LinuxMiceActionsEnabled() {
@@ -255,6 +255,51 @@ func (s *Server) handleVault(w http.ResponseWriter, r *http.Request) {
 			state = "on"
 		}
 		s.vaultChange(w, r, []string{"--yes", "vault", "ask", spec, state}, nil)
+	case "uses":
+		// How agents may use one secret (LinuxMice ADR 0080).
+		var req struct {
+			vaultRef
+			Uses []string `json:"uses"`
+		}
+		if err := json.NewDecoder(body).Decode(&req); err != nil {
+			writeError(w, http.StatusBadRequest, errors.New("invalid request"))
+			return
+		}
+		req.Field = ""
+		spec, err := req.vaultRef.spec()
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err)
+			return
+		}
+		list := []string{}
+		for _, use := range req.Uses {
+			switch use {
+			case "http", "fill", "code", "run":
+				list = append(list, use)
+			default:
+				writeError(w, http.StatusBadRequest, fmt.Errorf("%q is not a use (http, fill, code, run)", use))
+				return
+			}
+		}
+		uses := "none"
+		if len(list) > 0 {
+			uses = strings.Join(list, ",")
+		}
+		s.vaultChange(w, r, []string{"--yes", "vault", "uses", spec, uses}, nil)
+	case "agents":
+		var req struct {
+			Vault  string `json:"vault"`
+			Policy string `json:"policy"`
+		}
+		if err := json.NewDecoder(body).Decode(&req); err != nil || !vaultNamePattern.MatchString(req.Vault) {
+			writeError(w, http.StatusBadRequest, errors.New("give a vault"))
+			return
+		}
+		if req.Policy != "use" && req.Policy != "ask" && req.Policy != "never" {
+			writeError(w, http.StatusBadRequest, errors.New("agents may use, ask or never"))
+			return
+		}
+		s.vaultChange(w, r, []string{"--yes", "vault", "agents", req.Vault, req.Policy}, nil)
 	case "target":
 		var req struct {
 			vaultRef
