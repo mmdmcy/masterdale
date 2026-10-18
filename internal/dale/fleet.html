@@ -286,9 +286,7 @@
       const opts = Object.assign({}, options, { headers: Object.assign({}, options.headers || {}, authHeaders()) });
       let res = await fetch(path, opts);
       if (res.status === 401) {
-        if (res.headers.get("X-Masterdale-OIDC") === "enabled") { window.location.assign("/auth/oidc/start"); throw new Error("signing in"); }
-        const token = window.prompt("Masterdale token");
-        if (token) { localStorage.setItem("masterdale.dashboard.token", token.trim()); opts.headers = Object.assign({}, options.headers || {}, authHeaders()); res = await fetch(path, opts); }
+        window.location.assign("/signin"); throw new Error("signing in");
       }
       const text = await res.text();
       let body = null;
@@ -803,15 +801,33 @@
     function renderIdentity(data) {
       const canChange = state.caps?.actions_enabled;
       const dis = canChange ? "" : "disabled";
-      $("cards").innerHTML = `<div class="card"><strong>Sign-in service</strong><span>${esc(data.detail)}</span></div>`;
-      $("view").innerHTML = data.users.map((u) => `<div class="panel"><h3>${esc(u.name || u.email)} ${pill(u.authenticator === "on" ? "ok" : "warn")} <span class="muted">authenticator ${esc(u.authenticator)}</span></h3>
-        <p>Signs in as <code>${esc(u.email)}</code>${u.admin ? " (admin)" : ""}${u.enabled ? "" : " · disabled"} · last sign-in ${esc(u.last_sign_in ? new Date(u.last_sign_in).toLocaleString() : "never")}</p>
+      $("cards").innerHTML = `<div class="card"><strong>Accounts</strong><span>${esc(data.detail)}</span></div>`;
+      $("view").innerHTML = `<div id="browsers"><div class="panel muted">loading browsers…</div></div>` +
+        `<div class="panel"><h3>Password sign-in</h3><p class="muted">The other way in, for a browser on a device that has no LinuxMice: email and password at “Sign in with email and password”.</p>` +
+        data.users.map((u) => `<p><code>${esc(u.email)}</code>${u.admin ? " (admin)" : ""}${u.enabled ? "" : ", disabled"}; last password sign-in ${esc(u.last_sign_in ? new Date(u.last_sign_in).toLocaleString() : "never")}${u.authenticator === "on" ? "; asks for an authenticator code" : ""}</p>
+        <details><summary>Optional: an authenticator app or recovery codes for this account</summary>
+        <p class="muted">Only for the password sign-in. Signing in from your own devices never needs it.</p>
         <div class="toolbar">${u.authenticator === "on"
           ? `<button class="danger" data-identity="authenticator-off" data-email="${esc(u.email)}" type="button" ${dis}>Turn the authenticator off…</button>`
-          : `<button class="primary" data-identity="authenticator-on" data-email="${esc(u.email)}" type="button" ${dis}>Set up an authenticator app</button>`}
+          : `<button data-identity="authenticator-on" data-email="${esc(u.email)}" type="button" ${dis}>Set up an authenticator app</button>`}
           <button data-identity="recovery-codes" data-email="${esc(u.email)}" type="button" ${dis}>New recovery codes…</button></div>
-        <div id="identitySecret-${esc(u.email)}"></div></div>`).join("") +
-        `<div class="panel"><p>With an authenticator app on, signing in asks for its 6-digit code after your password. If you lose the phone, a recovery code signs you in once; on the device with the sign-in service <code>lmice identity authenticator off --email EMAIL</code> turns it off. <code>lmice identity</code></p></div>`;
+        <div id="identitySecret-${esc(u.email)}"></div></details>`).join("") +
+        `<p class="muted"><code>lmice identity</code></p></div>`;
+      loadBrowsers();
+    }
+
+    async function loadBrowsers() {
+      let data;
+      try { data = await api("/v1/session"); } catch (error) { $("browsers").innerHTML = `<div class="panel">browsers: ${esc(error.message)}</div>`; return; }
+      const when = (t) => new Date(t).toLocaleString();
+      $("browsers").innerHTML = `<div class="panel"><h3>Browsers waiting to sign in</h3>` +
+        (data.waiting.length ? `<div class="scroll"><table><thead><tr><th>Code</th><th>Browser</th><th>Since</th><th></th></tr></thead><tbody>${data.waiting.map((w) => `<tr><td class="mono">${esc(w.code)}</td><td>${esc(w.browser)}${w.address ? ` <span class="muted">${esc(w.address)}</span>` : ""}</td><td class="muted">${esc(when(w.since))}</td><td><button class="primary" data-signin-allow="${esc(w.code)}" type="button">Allow</button></td></tr>`).join("")}</tbody></table></div>`
+          : `<p class="muted">None. A browser that is not signed in shows a code; allow it here or with <code>lmice signin CODE</code>. Only allow a code you see on your own screen.</p>`) +
+        `<div class="toolbar"><button data-signin-refresh type="button">Check again</button></div></div>` +
+        `<div class="panel"><h3>Signed-in browsers</h3>` +
+        (data.browsers.length ? `<div class="scroll"><table><thead><tr><th>Browser</th><th>How</th><th>Since</th><th>Until</th></tr></thead><tbody>${data.browsers.map((b) => `<tr><td>${esc(b.browser)}${b.this ? ` ${pill("ok")} this one` : ""}</td><td class="muted">${esc(b.how)}</td><td class="muted">${esc(when(b.since))}</td><td class="muted">${esc(when(b.until))}</td></tr>`).join("")}</tbody></table></div>` : `<p class="muted">None (this page was opened from the device itself).</p>`) +
+        `<div class="toolbar"><button data-signin-out type="button">Sign this browser out</button><button class="danger" data-signin-others type="button">Sign every other browser out…</button></div>
+        <p class="muted">A browser stays signed in for 30 days. <code>lmice signin</code> opens LinuxMice signed in on the device you type it on.</p></div>`;
     }
 
     async function identityAction(action, email, code) {
@@ -1492,7 +1508,7 @@
       inventory: ["Inventory", "What is installed and running on a machine: packages you chose, apps, services, containers, programs and repositories."],
       servers: ["Servers", "Servers outside the fleet, like the VPS: updates, reboots and what is unhealthy."],
       tests: ["Tests", "The repositories' tests, run every night here; failures also show on Attention."],
-      identity: ["Sign-in", "The accounts that can sign in to Masterdale and your other apps, a second factor from an authenticator app, and recovery codes."],
+      identity: ["Sign-in", "Which browsers are signed in, browsers waiting for you to allow them, and the password sign-in for devices without LinuxMice."],
       apps: ["Apps", "Applications LinuxMice builds and runs for you, like T3 Code, and their updates."],
       github: ["GitHub copies", "A copy of every repository you own on GitHub, kept on your own machine and in your own Forgejo, in case you are ever locked out. Nothing is ever deleted from the copies."],
       checkouts: ["Checkouts", "Git checkouts kept up to date across devices, including the Windows side of WSL laptops: what is behind, and a safe update."],
@@ -1595,6 +1611,29 @@
           } catch (error) { $("meta").textContent = `failed: ${error.message}`; return; }
           state.views.changes = null;
           load(true);
+        });
+        return;
+      }
+      const allowButton = event.target.closest("button[data-signin-allow]");
+      if (allowButton) {
+        const code = allowButton.dataset.signinAllow;
+        allowButton.disabled = true;
+        api("/v1/session/approve", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code }) })
+          .then(() => { allowButton.textContent = "Allowed"; setTimeout(loadBrowsers, 1500); })
+          .catch((error) => { allowButton.textContent = `not allowed: ${error.message}`; });
+        return;
+      }
+      if (event.target.closest("button[data-signin-refresh]")) { loadBrowsers(); return; }
+      if (event.target.closest("button[data-signin-out]")) {
+        fetch("/auth/signout", { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: "{}" })
+          .then(() => window.location.assign("/signin"));
+        return;
+      }
+      if (event.target.closest("button[data-signin-others]")) {
+        askConfirm("lmice signin end-others", "Every browser but this one has to sign in again.", async () => {
+          const r = await api("/v1/session/end-others", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+          loadBrowsers();
+          return `${r.signed_out} browser(s) signed out`;
         });
         return;
       }

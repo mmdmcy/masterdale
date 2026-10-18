@@ -130,7 +130,7 @@ func (s *Server) handleDashboardRoot(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	http.Redirect(w, r, "/dashboard", http.StatusFound)
+	http.Redirect(w, r, "/fleet", http.StatusFound)
 }
 
 func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {

@@ -18,12 +18,9 @@ import (
 )
 
 const (
-	oidcFlowCookie    = "masterdale_oidc_flow"
-	oidcSessionCookie = "masterdale_session"
-	oidcFlowTTL       = 10 * time.Minute
-	oidcSessionTTL    = 12 * time.Hour
-	oidcMaxFlows      = 64
-	oidcMaxSessions   = 64
+	oidcFlowCookie = "masterdale_oidc_flow"
+	oidcFlowTTL    = 10 * time.Minute
+	oidcMaxFlows   = 64
 )
 
 type OIDCConfig struct {
@@ -57,17 +54,11 @@ type oidcPendingFlow struct {
 	expiresAt        time.Time
 }
 
-type oidcSession struct {
-	subject   string
-	expiresAt time.Time
-}
-
 type oidcRuntime struct {
-	config   *OIDCConfig
-	keySet   *oidcKeySet
-	mu       sync.Mutex
-	flows    map[string]oidcPendingFlow
-	sessions map[[32]byte]oidcSession
+	config *OIDCConfig
+	keySet *oidcKeySet
+	mu     sync.Mutex
+	flows  map[string]oidcPendingFlow
 }
 
 func loadOIDCConfig() (*OIDCConfig, error) {
@@ -152,8 +143,7 @@ func newOIDCRuntime(config *OIDCConfig) *oidcRuntime {
 	}
 	return &oidcRuntime{
 		config: config, keySet: &oidcKeySet{},
-		flows:    make(map[string]oidcPendingFlow),
-		sessions: make(map[[32]byte]oidcSession),
+		flows: make(map[string]oidcPendingFlow),
 	}
 }
 
@@ -276,21 +266,17 @@ func (s *Server) handleOIDCCallback(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "This LinuxMice identity is not allowed", http.StatusForbidden)
 		return
 	}
-	sessionToken, err := s.oidc.issueSession(claims.Subject)
+	sessionToken, err := s.sessions.issue(claims.Subject, "password", r.UserAgent())
 	if err != nil {
 		http.Error(w, "Could not create a session", http.StatusInternalServerError)
 		return
 	}
-	http.SetCookie(w, &http.Cookie{
-		Name: oidcSessionCookie, Value: sessionToken, Path: "/",
-		MaxAge: int(oidcSessionTTL.Seconds()), HttpOnly: true, Secure: s.oidc.secureCookie(),
-		SameSite: http.SameSiteLaxMode,
-	})
+	s.setSessionCookie(w, r, sessionToken)
 	http.SetCookie(w, &http.Cookie{
 		Name: oidcFlowCookie, Value: "", Path: "/auth/oidc/callback",
 		MaxAge: -1, HttpOnly: true, Secure: s.oidc.secureCookie(), SameSite: http.SameSiteLaxMode,
 	})
-	http.Redirect(w, r, "/dashboard", http.StatusSeeOther)
+	http.Redirect(w, r, "/fleet", http.StatusSeeOther)
 }
 
 // provider fetches the OIDC discovery document. The public key set is
@@ -339,45 +325,6 @@ func (o *oidcRuntime) takeFlow(state, browserToken string) (oidcPendingFlow, boo
 		return oidcPendingFlow{}, false
 	}
 	return flow, true
-}
-
-func (o *oidcRuntime) issueSession(subject string) (string, error) {
-	token, err := randomURLToken(32)
-	if err != nil {
-		return "", err
-	}
-	o.mu.Lock()
-	defer o.mu.Unlock()
-	now := time.Now()
-	for key, session := range o.sessions {
-		if !session.expiresAt.After(now) {
-			delete(o.sessions, key)
-		}
-	}
-	if len(o.sessions) >= oidcMaxSessions {
-		return "", errors.New("too many active sessions")
-	}
-	o.sessions[sha256.Sum256([]byte(token))] = oidcSession{
-		subject: subject, expiresAt: now.Add(oidcSessionTTL),
-	}
-	return token, nil
-}
-
-func (o *oidcRuntime) authorizeSession(r *http.Request) bool {
-	cookie, err := r.Cookie(oidcSessionCookie)
-	if err != nil || cookie.Value == "" {
-		return false
-	}
-	o.mu.Lock()
-	defer o.mu.Unlock()
-	key := sha256.Sum256([]byte(cookie.Value))
-	session, ok := o.sessions[key]
-	if !ok || !session.expiresAt.After(time.Now()) {
-		delete(o.sessions, key)
-		return false
-	}
-	_, allowed := o.config.AllowedSubjects[session.subject]
-	return allowed
 }
 
 func (o *oidcRuntime) secureCookie() bool {

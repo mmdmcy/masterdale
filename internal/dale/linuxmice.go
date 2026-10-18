@@ -904,7 +904,7 @@ func (s *Server) handleT3CodePair(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusForbidden, errors.New("pairing needs a same-origin JSON request"))
 		return
 	}
-	if s.oidc == nil || !s.oidc.authorizeSession(r) {
+	if !s.signedIn(r) {
 		writeError(w, http.StatusForbidden, errors.New("pairing needs you signed in to Masterdale (a device token or a local request is not enough)"))
 		return
 	}
@@ -960,7 +960,7 @@ func (s *Server) handleIdentityAction(w http.ResponseWriter, r *http.Request, ac
 		writeError(w, http.StatusForbidden, errors.New("sign-in changes need a same-origin JSON request"))
 		return
 	}
-	if s.oidc == nil || !s.oidc.authorizeSession(r) {
+	if !s.signedIn(r) {
 		writeError(w, http.StatusForbidden, errors.New("sign-in changes need you signed in to Masterdale (a device token or a local request is not enough)"))
 		return
 	}

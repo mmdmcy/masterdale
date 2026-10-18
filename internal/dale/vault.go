@@ -157,7 +157,7 @@ func (s *Server) handleVault(w http.ResponseWriter, r *http.Request) {
 	}
 	// A person, signed in: not the device token and not a local request,
 	// which every program on this machine (an agent too) could make.
-	if s.oidc == nil || !s.oidc.authorizeSession(r) {
+	if !s.signedIn(r) {
 		writeError(w, http.StatusForbidden, errors.New("vault actions need you signed in to Masterdale (a device token or a local request is not enough)"))
 		return
 	}

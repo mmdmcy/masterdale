@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <title>Sign in to LinuxMice</title>
+  <style>
+    /* The fleet page's look (NERV orange, MAGI green readouts, title-card
+       serif, hazard stripe), no fonts or images to load. */
+    :root {
+      color-scheme: dark;
+      --bg: #050403;
+      --surface: #0c0a08;
+      --line: #4a3214;
+      --text: #f4e9d8;
+      --muted: #a8916f;
+      --accent: #ff7a00;
+      --ok: #3dff7a;
+      --warn: #ffb000;
+      --bad: #ff3030;
+      --hazard: repeating-linear-gradient(-45deg, #ffb000 0 10px, #050403 10px 20px);
+      --readout: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      --title: "Times New Roman", "Noto Serif", "DejaVu Serif", Georgia, serif;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    * { box-sizing: border-box; }
+    html, body { min-height: 100%; }
+    body {
+      margin: 0; color: var(--text); font-size: 16px; line-height: 1.5;
+      background-color: var(--bg);
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='56' height='97' viewBox='0 0 56 97'%3E%3Cpath d='M28 0L56 16v32L28 64 0 48V16zM28 64v33' fill='none' stroke='%23ff7a00' stroke-opacity='.06'/%3E%3C/svg%3E");
+    }
+    .stripe { height: 10px; background: var(--hazard); border-bottom: 2px solid var(--accent); }
+    main { max-width: 40rem; padding: 48px 16px 64px; margin: 0 auto 0 max(16px, 12vw); }
+    .brand { margin: 0 0 40px; font: 700 13px/1 var(--readout); color: var(--accent); letter-spacing: .06em; }
+    h1 {
+      margin: 0 0 12px; font-family: var(--title); font-weight: 900; color: #fff;
+      font-size: clamp(40px, 8vw, 72px); line-height: .92; letter-spacing: -.03em;
+      transform: scaleY(1.18); transform-origin: left bottom; text-transform: uppercase;
+    }
+    .lede { margin: 26px 0 28px; color: var(--muted); max-width: 34rem; }
+    .notice { border-left: 4px solid var(--warn); padding: 6px 12px; margin: 0 0 24px; color: var(--warn); }
+
+    /* The one loud thing: the code, as a MAGI readout. */
+    .code { display: flex; align-items: center; gap: 14px; margin: 0 0 10px; }
+    .code span {
+      font: 700 clamp(40px, 11vw, 76px)/1 var(--readout); color: var(--ok);
+      letter-spacing: .12em; padding: 14px 6px 14px 20px;
+      border: 2px solid var(--ok); background: rgba(61, 255, 122, .05);
+      text-shadow: 0 0 18px rgba(61, 255, 122, .45);
+      clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
+    }
+    .code i { width: 14px; height: 3px; background: var(--ok); flex: none; }
+    .code.dim span { color: var(--muted); border-color: var(--line); text-shadow: none; background: none; }
+
+    .status { display: flex; align-items: center; gap: 10px; margin: 0 0 36px; font: 13px/1.4 var(--readout); color: var(--muted); min-height: 1.4em; }
+    .status b { width: 9px; height: 9px; background: var(--warn); flex: none; animation: blink 1.4s steps(2, start) infinite; }
+    .status.ok { color: var(--ok); }
+    .status.ok b { background: var(--ok); animation: none; }
+    .status.bad { color: var(--bad); }
+    .status.bad b { background: var(--bad); animation: none; }
+    @keyframes blink { to { visibility: hidden; } }
+    @media (prefers-reduced-motion: reduce) { .status b { animation: none; } }
+
+    h2 { margin: 0 0 8px; font-size: 16px; color: #fff; }
+    .way { margin: 0 0 26px; }
+    .way p { margin: 0 0 8px; color: var(--muted); max-width: 34rem; }
+    .cmd { display: flex; align-items: stretch; max-width: 100%; border: 1px solid var(--line); background: #000; }
+    .cmd code { flex: 1; min-width: 0; padding: 10px 12px; font: 15px/1.4 var(--readout); color: var(--text); overflow-x: auto; white-space: nowrap; }
+    .cmd code::before { content: "$ "; color: var(--accent); }
+    button, .button {
+      font: 600 14px/1 var(--readout); padding: 10px 14px; cursor: pointer;
+      background: var(--surface); color: var(--accent); border: 0; border-left: 1px solid var(--line);
+    }
+    button:hover, .button:hover { background: var(--accent); color: #000; }
+    :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    a { color: var(--accent); }
+    .other { margin-top: 40px; padding-top: 18px; border-top: 1px solid var(--line); color: var(--muted); font-size: 14px; }
+    .other p { margin: 0 0 8px; }
+    @media (max-width: 520px) {
+      main { margin: 0 auto; padding-top: 32px; }
+      .code { gap: 8px; }
+      .code span { padding: 10px 2px 10px 12px; }
+      .code i { width: 8px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="stripe" aria-hidden="true"></div>
+  <main>
+    <p class="brand">LinuxMice</p>
+    <h1>Sign in this browser</h1>
+    <p class="lede">No password needed: allow this browser from a device you already own. Codes work for ten minutes; this browser then stays signed in for 30 days.</p>
+    <p class="notice" id="notice" hidden></p>
+
+    <div class="code dim" id="code" aria-live="polite" aria-label="Approval code">
+      <span id="code-a">····</span><i aria-hidden="true"></i><span id="code-b">····</span>
+    </div>
+    <p class="status" id="status" role="status"><b aria-hidden="true"></b><span id="status-text">Getting a code</span></p>
+
+    <section class="way">
+      <h2>Allow it from a terminal on any of your devices</h2>
+      <div class="cmd"><code id="cmd">lmice signin ····-····</code><button type="button" id="copy">Copy</button></div>
+    </section>
+    <section class="way">
+      <h2>Or from a browser that is already signed in</h2>
+      <p>Open LinuxMice there, go to Sign-in, and allow the browser showing this code.</p>
+    </section>
+
+    <div class="other">
+      <p>At a terminal on the device you want to use? <code>lmice signin</code> opens LinuxMice there, already signed in.</p>
+      <p id="password" hidden><a href="/auth/oidc/start">Sign in with email and password instead</a></p>
+    </div>
+  </main>
+  <script>
+    "use strict";
+    const $ = (id) => document.getElementById(id);
+    let wait = null, timer = null, tick = null;
+
+    function status(text, kind) {
+      $("status").className = "status" + (kind ? " " + kind : "");
+      $("status-text").textContent = text;
+    }
+
+    function left() {
+      const seconds = Math.max(0, Math.round((wait.until - Date.now()) / 1000));
+      return Math.floor(seconds / 60) + ":" + String(seconds % 60).padStart(2, "0");
+    }
+
+    async function start() {
+      clearInterval(timer); clearInterval(tick);
+      try {
+        const res = await fetch("/auth/wait", {
+          method: "POST", credentials: "same-origin",
+          headers: { "Content-Type": "application/json" }, body: "{}",
+        });
+        const body = await res.json();
+        if (!res.ok) throw new Error(body.error || "the server said no");
+        wait = { id: body.id, code: body.code, until: Date.now() + body.expires_in * 1000 };
+        const [a, b] = body.code.split("-");
+        $("code-a").textContent = a; $("code-b").textContent = b;
+        $("code").classList.remove("dim");
+        $("cmd").textContent = "lmice signin " + body.code;
+        $("password").hidden = !body.password;
+        status("Waiting for approval, " + left() + " left");
+        tick = setInterval(() => {
+          if (Date.now() >= wait.until) { start(); return; }
+          status("Waiting for approval, " + left() + " left");
+        }, 1000);
+        timer = setInterval(poll, 2000);
+      } catch (error) {
+        status("No code: " + error.message + ". Reload the page to try again.", "bad");
+      }
+    }
+
+    async function poll() {
+      try {
+        const res = await fetch("/auth/wait?id=" + encodeURIComponent(wait.id), { credentials: "same-origin" });
+        const body = await res.json();
+        if (body.status === "approved") {
+          clearInterval(timer); clearInterval(tick);
+          status("Allowed. Opening LinuxMice", "ok");
+          location.replace("/fleet");
+        } else if (body.status === "gone") {
+          start();
+        }
+      } catch (_) { /* a dropped poll; the next one tries again */ }
+    }
+
+    $("copy").addEventListener("click", async () => {
+      const text = $("cmd").textContent;
+      try { await navigator.clipboard.writeText(text); $("copy").textContent = "Copied"; }
+      catch (_) { getSelection().selectAllChildren($("cmd")); $("copy").textContent = "Selected"; }
+      setTimeout(() => { $("copy").textContent = "Copy"; }, 1600);
+    });
+
+    if (new URLSearchParams(location.search).get("link") === "used") {
+      $("notice").textContent = "That sign-in link was already used or is older than five minutes. Use the code below, or run lmice signin again.";
+      $("notice").hidden = false;
+    }
+    start();
+  </script>
+</body>
+</html>

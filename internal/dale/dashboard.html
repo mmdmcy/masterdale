@@ -802,8 +802,8 @@
       const headers = Object.assign({}, options.headers || {}, authHeaders());
       let res = await fetch(path, Object.assign({}, options, { headers }));
       if (res.status !== 401) return res;
-      if (res.headers.get("X-Masterdale-OIDC") === "enabled") {
-        window.location.assign("/auth/oidc/start");
+      if (res.headers.get("X-Masterdale-Signin")) {
+        window.location.assign("/signin");
         return res;
       }
       const token = window.prompt("Masterdale token");

@@ -35,6 +35,7 @@ type Server struct {
 	dashboardCache *dashboardCache
 	linuxmice      *linuxmiceCache
 	oidc           *oidcRuntime
+	sessions       *sessionStore
 	token          *tokenSource
 }
 
@@ -43,6 +44,7 @@ func NewServer(cfg Config, store *Store) *Server {
 		cfg: cfg, store: store, mux: http.NewServeMux(), dashboardCache: newDashboardCache(),
 		linuxmice: &linuxmiceCache{},
 		oidc:      newOIDCRuntime(cfg.OIDC),
+		sessions:  newSessionStore(cfg.DataDir),
 		token:     newTokenSource(cfg.AccessToken),
 	}
 	s.routes()
@@ -93,11 +95,11 @@ func (s *Server) authMiddleware(next http.Handler) http.Handler {
 			writeError(w, http.StatusForbidden, errors.New("remote access is restricted to loopback and private-network addresses by default; set DALE_REMOTE_SCOPE=public only if a firewall or reverse proxy protects this service"))
 			return
 		}
-		if r.URL.Path == "/healthz" || isDashboardShellRequest(r) || isOIDCRoute(r) || isTrustedLoopbackRequest(r) || isVaultAnswerRoute(r) {
+		if r.URL.Path == "/healthz" || isDashboardShellRequest(r) || isOIDCRoute(r) || isSigninRoute(r) || isTrustedLoopbackRequest(r) || isVaultAnswerRoute(r) {
 			next.ServeHTTP(w, r)
 			return
 		}
-		if s.oidc != nil && s.oidc.authorizeSession(r) {
+		if s.signedIn(r) {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -107,9 +109,8 @@ func (s *Server) authMiddleware(next http.Handler) http.Handler {
 			return
 		}
 		if !validBearerToken(r.Header.Get("Authorization"), token) {
-			if s.oidc != nil {
-				w.Header().Set("X-Masterdale-OIDC", "enabled")
-			}
+			// The page sends the person to /signin.
+			w.Header().Set("X-Masterdale-Signin", "/signin")
 			writeError(w, http.StatusUnauthorized, errors.New("authorization required"))
 			return
 		}
@@ -266,6 +267,12 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("/healthz", s.handleHealth)
 	s.mux.HandleFunc("/auth/oidc/start", s.handleOIDCStart)
 	s.mux.HandleFunc("/auth/oidc/callback", s.handleOIDCCallback)
+	s.mux.HandleFunc("/signin", s.handleSigninPage)
+	s.mux.HandleFunc("/auth/link/", s.handleSigninLink)
+	s.mux.HandleFunc("/auth/wait", s.handleSigninWait)
+	s.mux.HandleFunc("/auth/signout", s.handleSignout)
+	s.mux.HandleFunc("/v1/session", s.handleSession)
+	s.mux.HandleFunc("/v1/session/", s.handleSession)
 	s.mux.HandleFunc("/v1/events", s.handleEvents)
 	s.mux.HandleFunc("/v1/resources/search", s.handleSearch)
 	s.mux.HandleFunc("/v1/tasks", s.handleTasks)

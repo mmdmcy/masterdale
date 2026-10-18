@@ -3,6 +3,9 @@ package dale
 import (
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -44,33 +47,33 @@ func TestOIDCConfigIsOptionalAndRejectsPartialOrInsecureValues(t *testing.T) {
 	}
 }
 
-func TestOIDCSessionIsOpaqueBoundedAndAllowlisted(t *testing.T) {
-	runtime := newOIDCRuntime(&OIDCConfig{
-		RedirectURL: "https://masterdale.example.test/auth/oidc/callback",
-		AllowedSubjects: map[string]struct{}{
-			"owner": {},
-		},
-	})
-	token, err := runtime.issueSession("owner")
+func TestSessionsAreOpaqueExpireAndSurviveARestart(t *testing.T) {
+	dir := t.TempDir()
+	store := newSessionStore(dir)
+	token, err := store.issue("owner", "password", "Mozilla/5.0 (Macintosh; Mac OS X) Chrome/140")
 	if err != nil {
 		t.Fatal(err)
 	}
 	request := httptest.NewRequest(http.MethodGet, "/v1/dashboard", nil)
-	request.AddCookie(&http.Cookie{Name: oidcSessionCookie, Value: token})
-	if !runtime.authorizeSession(request) {
-		t.Fatal("expected issued owner session to authorize")
+	request.AddCookie(&http.Cookie{Name: sessionCookie, Value: token})
+	if store.subject(request) != "owner" {
+		t.Fatal("expected the issued session to sign in")
 	}
-
-	key := sha256Bytes(token)
-	var hashed [32]byte
-	copy(hashed[:], key)
-	runtime.mu.Lock()
-	session := runtime.sessions[hashed]
-	session.expiresAt = time.Now().Add(-time.Second)
-	runtime.sessions[hashed] = session
-	runtime.mu.Unlock()
-	if runtime.authorizeSession(request) {
-		t.Fatal("expected expired session to fail")
+	data, _ := os.ReadFile(filepath.Join(dir, "sessions.json"))
+	if strings.Contains(string(data), token) {
+		t.Fatal("the session file must hold hashes only")
+	}
+	restarted := newSessionStore(dir)
+	if restarted.subject(request) != "owner" {
+		t.Fatal("expected the session to survive a restart")
+	}
+	restarted.mu.Lock()
+	session := restarted.sessions[hashHex(token)]
+	session.ExpiresAt = time.Now().Add(-time.Second)
+	restarted.sessions[hashHex(token)] = session
+	restarted.mu.Unlock()
+	if restarted.subject(request) != "" {
+		t.Fatal("expected the expired session to fail")
 	}
 }
 
