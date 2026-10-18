@@ -218,6 +218,8 @@ func TestNewFleetJobsCheckTheirInputs(t *testing.T) {
 		"--yes --format json tools roll lmice":                        {Kind: "tools-roll", ID: "lmice"},
 		"--yes fleet join box --target rei@100.1.2.3 --via lawnmower": {Kind: "fleet-join", ID: "box", A: "rei@100.1.2.3", B: "lawnmower"},
 		"--yes https trust --device mini":                             {Kind: "https-trust", Device: "mini"},
+		"--format json signin app --on mini":                          {Kind: "signin-app", Device: "mini"},
+		"--format json signin app --on mini --remove":                 {Kind: "signin-app-remove", Device: "mini"},
 		"--yes app update t3code":                                     {Kind: "app-update", ID: "t3code"},
 	}
 	for want, req := range good {

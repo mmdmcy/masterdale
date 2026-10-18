@@ -834,7 +834,10 @@
           : `<button data-identity="authenticator-on" data-email="${esc(key)}" type="button" ${dis}>Set up an authenticator app</button>`}
           <button data-identity="recovery-codes" data-email="${esc(key)}" type="button" ${dis}>New recovery codes…</button></div>
         <div id="identitySecret-${esc(key)}"></div></details>`; }).join("") +
-        `<p class="muted"><code>lmice identity</code></p></div>`;
+        `<p class="muted"><code>lmice identity</code></p></div>` +
+        `<div class="panel"><h3>The LinuxMice app</h3><p class="muted">A LinuxMice icon to click on a device: it opens this GUI there, already signed in. In the app menu and on the desktop on Linux, in Applications on a Mac, in the Start menu and on the desktop of the Windows a WSL device runs on.</p>
+        <div class="toolbar"><select id="appDevice">${fleetDevices().map((d) => `<option>${esc(d)}</option>`).join("")}</select><button data-signin-app="add" type="button" ${dis}>Add the app…</button><button class="danger" data-signin-app="remove" type="button" ${dis}>Remove it…</button><span class="muted" id="appMessage" role="status"></span></div>
+        <p class="muted"><code>lmice signin app --on DEVICE</code></p></div>`;
       loadBrowsers();
     }
 
@@ -1754,6 +1757,15 @@
         askConfirm(`lmice net add ${name} --key ${key}${address ? ` --address ${address}` : ""}`, "The hub accepts this key as a member at once.", async () => {
           try { const job = await startJob({ kind: "net-add", id: name, a: key, b: address }); $("meta").textContent = job.state === "done" ? `${name} added` : `failed: ${job.view?.error || ""}`; } catch (error) { $("meta").textContent = `failed: ${error.message}`; }
           state.views.net = null; load(true);
+        });
+        return;
+      }
+      const signinApp = event.target.closest("button[data-signin-app]");
+      if (signinApp) {
+        const remove = signinApp.dataset.signinApp === "remove", device = $("appDevice").value;
+        askConfirm(`lmice signin app --on ${device}${remove ? " --remove" : ""}`, remove ? "Takes the LinuxMice icon off that device." : "Puts a LinuxMice icon on that device that opens this GUI, signed in.", async () => {
+          $("appMessage").textContent = "working…";
+          try { const job = await startJob({ kind: remove ? "signin-app-remove" : "signin-app", device }); $("appMessage").textContent = job.state === "done" ? (job.view?.data?.devices?.[0]?.detail || "done") : `failed: ${job.view?.data?.devices?.[0]?.detail || job.view?.error || ""}`; } catch (error) { $("appMessage").textContent = `failed: ${error.message}`; }
         });
         return;
       }

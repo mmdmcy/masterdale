@@ -616,6 +616,15 @@ func linuxmiceJobArgs(req LinuxMiceJobRequest) ([]string, bool, error) {
 		return []string{"--yes", "--format", "json", "backups", "verify"}, true, nil
 	case "attention-notify":
 		return []string{"--yes", "attention", "notify"}, true, nil
+	case "signin-app", "signin-app-remove":
+		if !linuxmiceDevicePattern.MatchString(req.Device) {
+			return nil, false, errors.New("pick a device")
+		}
+		args := []string{"--format", "json", "signin", "app", "--on", req.Device}
+		if req.Kind == "signin-app-remove" {
+			args = append(args, "--remove")
+		}
+		return args, true, nil
 	case "https-trust", "https-names":
 		if !linuxmiceDevicePattern.MatchString(req.Device) {
 			return nil, false, errors.New("pick a device")
