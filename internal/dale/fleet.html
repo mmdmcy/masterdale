@@ -824,16 +824,16 @@
       const dis = canChange ? "" : "disabled";
       $("cards").innerHTML = `<div class="card"><strong>Accounts</strong><span>${esc(data.detail)}</span></div>`;
       $("view").innerHTML = `<div id="browsers"><div class="panel muted">loading browsers…</div></div>` +
-        `<div class="panel"><h3>Password sign-in</h3><p class="muted">The other way in, for a browser on a device that has no LinuxMice: email and password at “Sign in with email and password”.</p>` +
-        data.users.map((u) => `<p><b>${esc(u.name || u.email)}</b>: <code>${esc(u.email)}</code>${(u.aliases || []).length ? ` <span class="muted">(also ${u.aliases.map(esc).join(", ")})</span>` : ""}${u.admin ? " (admin)" : ""}${u.enabled ? "" : ", disabled"}; last password sign-in ${esc(u.last_sign_in ? new Date(u.last_sign_in).toLocaleString() : "never")}${u.authenticator === "on" ? "; asks for an authenticator code" : ""}</p>
-        <form class="vault-form" data-identity-email="${esc(u.email)}"><label>New email <input name="new_email" type="email" required placeholder="you@example.com"></label><label>Name <input name="name" value="${esc(u.name || "")}"></label><div class="toolbar"><button type="submit" ${dis}>Change email…</button><span class="muted" role="status">The old address keeps signing in; apps keep knowing you.</span></div></form>
+        `<div class="panel"><h3>Password sign-in</h3><p class="muted">The other way in, for a browser on a device that has no LinuxMice: your username and password at “Sign in with a password”. The email is only for apps that insist on one (Forgejo); nothing is sent to it.</p>` +
+        data.users.map((u) => { const key = u.username || u.email; return `<p><b>${esc(u.name || key)}</b>: <code>${esc(key)}</code> <span class="muted">${esc(u.email)}${(u.aliases || []).length ? `, also ${u.aliases.map(esc).join(", ")}` : ""}</span>${u.admin ? " (admin)" : ""}${u.enabled ? "" : ", disabled"}; last password sign-in ${esc(u.last_sign_in ? new Date(u.last_sign_in).toLocaleString() : "never")}${u.authenticator === "on" ? "; asks for an authenticator code" : ""}</p>
+        <form class="vault-form" data-identity-account="${esc(key)}" data-username="${esc(u.username || "")}" data-email="${esc(u.email)}" data-name="${esc(u.name || "")}"><label>Username <input name="username" required pattern="[A-Za-z0-9][A-Za-z0-9._\\-]{0,63}" autocapitalize="none" spellcheck="false" value="${esc(u.username || "")}"></label><label>Email for apps <input name="email" type="email" required value="${esc(u.email)}"></label><label>Name <input name="name" value="${esc(u.name || "")}"></label><div class="toolbar"><button type="submit" ${dis}>Save account…</button><span class="muted" role="status">Apps keep knowing you; an old email keeps signing in.</span></div></form>
         <details><summary>Optional: an authenticator app or recovery codes for this account</summary>
         <p class="muted">Only for the password sign-in. Signing in from your own devices never needs it.</p>
         <div class="toolbar">${u.authenticator === "on"
-          ? `<button class="danger" data-identity="authenticator-off" data-email="${esc(u.email)}" type="button" ${dis}>Turn the authenticator off…</button>`
-          : `<button data-identity="authenticator-on" data-email="${esc(u.email)}" type="button" ${dis}>Set up an authenticator app</button>`}
-          <button data-identity="recovery-codes" data-email="${esc(u.email)}" type="button" ${dis}>New recovery codes…</button></div>
-        <div id="identitySecret-${esc(u.email)}"></div></details>`).join("") +
+          ? `<button class="danger" data-identity="authenticator-off" data-email="${esc(key)}" type="button" ${dis}>Turn the authenticator off…</button>`
+          : `<button data-identity="authenticator-on" data-email="${esc(key)}" type="button" ${dis}>Set up an authenticator app</button>`}
+          <button data-identity="recovery-codes" data-email="${esc(key)}" type="button" ${dis}>New recovery codes…</button></div>
+        <div id="identitySecret-${esc(key)}"></div></details>`; }).join("") +
         `<p class="muted"><code>lmice identity</code></p></div>`;
       loadBrowsers();
     }
@@ -1383,15 +1383,25 @@
       } catch (error) { vaultMessage(`Not copied: ${error.message}`); }
     }
     $("view").addEventListener("submit", async (event) => {
-      const emailForm = event.target.closest("form[data-identity-email]");
-      if (emailForm) {
+      const accountForm = event.target.closest("form[data-identity-account]");
+      if (accountForm) {
         event.preventDefault();
-        const email = emailForm.dataset.identityEmail, f = new FormData(emailForm), status = emailForm.querySelector("[role=status]");
-        const next = String(f.get("new_email") || "").trim(), name = String(f.get("name") || "").trim();
-        askConfirm(`lmice identity email --email ${email} --new-email ${next}${name ? ` --name "${name}"` : ""}`, `Signs in as ${next} from now on; ${email} keeps working too. Apps keep knowing you.`, async () => {
-          status.textContent = "changing…";
-          try { const r = await api("/v1/linuxmice/identity/email", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, new_email: next, name }) }); status.textContent = r.detail || "changed"; state.views.identity = null; setTimeout(() => load(true), 1500); }
-          catch (error) { status.textContent = `not changed: ${error.message}`; }
+        const d = accountForm.dataset, f = new FormData(accountForm), status = accountForm.querySelector("[role=status]");
+        const username = String(f.get("username") || "").trim().toLowerCase(), email = String(f.get("email") || "").trim().toLowerCase(), name = String(f.get("name") || "").trim();
+        const rename = username !== d.username, other = email !== d.email || name !== d.name;
+        if (!rename && !other) { status.textContent = "nothing changed"; return; }
+        const commands = [], effects = [];
+        if (other) { commands.push(`lmice identity email --user ${d.identityAccount} --new-email ${email}${name ? ` --name "${name}"` : ""}`); effects.push(email !== d.email ? `the email for apps becomes ${email}; ${d.email} keeps signing in` : "the name changes"); }
+        if (rename) { commands.push(`lmice identity username --user ${d.identityAccount} --new ${username}`); effects.push(`you sign in as ${username} from now on`); }
+        askConfirm(commands.join(" && "), `${effects.join("; ")}. Apps keep knowing you.`, async () => {
+          status.textContent = "saving…";
+          const post = (action, body) => api(`/v1/linuxmice/identity/${action}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+          try {
+            let r = {};
+            if (other) r = await post("email", { email: d.identityAccount, new_email: email, name });
+            if (rename) r = await post("username", { email: d.identityAccount, new_username: username });
+            status.textContent = r.detail || "saved"; state.views.identity = null; setTimeout(() => load(true), 1500);
+          } catch (error) { status.textContent = `not saved: ${error.message}`; state.views.identity = null; }
         });
         return;
       }
@@ -1718,7 +1728,7 @@
           } catch (error) { box.innerHTML = `<p>failed: ${esc(error.message)}</p>`; }
         };
         if (action === "authenticator-on") run();
-        else askConfirm(action === "recovery-codes" ? `lmice identity recovery-codes --email ${email}` : `lmice identity authenticator off --email ${email}`, action === "recovery-codes" ? "Makes new recovery codes; your unused old ones stop working." : "A password alone signs in again.", run);
+        else askConfirm(action === "recovery-codes" ? `lmice identity recovery-codes --user ${email}` : `lmice identity authenticator off --user ${email}`, action === "recovery-codes" ? "Makes new recovery codes; your unused old ones stop working." : "A password alone signs in again.", run);
         return;
       }
       const confirmButton = event.target.closest("button[data-identity-confirm]");

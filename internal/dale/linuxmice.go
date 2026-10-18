@@ -947,6 +947,9 @@ func t3codePairLink(out []byte) (string, bool) {
 // identityEmailPattern is an email address as lmice identity accepts it.
 var identityEmailPattern = regexp.MustCompile(`^[A-Za-z0-9._+-]{1,64}@[A-Za-z0-9.-]{1,253}$`)
 
+// identityUsernamePattern is a username, what people sign in with.
+var identityUsernamePattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`)
+
 // handleIdentityAction changes the sign-in service's accounts for a
 // signed-in person: the authenticator app on (its setup key comes back to
 // this browser only, once), confirm, off, and new recovery codes. Secrets
@@ -969,36 +972,39 @@ func (s *Server) handleIdentityAction(w http.ResponseWriter, r *http.Request, ac
 		return
 	}
 	var req struct {
-		Email    string `json:"email"`
-		Code     string `json:"code"`
-		NewEmail string `json:"new_email"`
-		Name     string `json:"name"`
+		// The account: its username or email.
+		Email       string `json:"email"`
+		Code        string `json:"code"`
+		NewEmail    string `json:"new_email"`
+		NewUsername string `json:"new_username"`
+		Name        string `json:"name"`
 	}
-	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<10)).Decode(&req); err != nil || !identityEmailPattern.MatchString(req.Email) {
-		writeError(w, http.StatusBadRequest, errors.New("give the account's email"))
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<10)).Decode(&req); err != nil ||
+		!(identityUsernamePattern.MatchString(req.Email) || identityEmailPattern.MatchString(req.Email)) {
+		writeError(w, http.StatusBadRequest, errors.New("give the account's username"))
 		return
 	}
 	var args []string
 	switch action {
 	case "authenticator-on":
-		args = []string{"--format", "json", "identity", "authenticator", "on", "--email", req.Email}
+		args = []string{"--format", "json", "identity", "authenticator", "on", "--user", req.Email}
 	case "authenticator-confirm":
 		code := strings.ReplaceAll(req.Code, " ", "")
 		if len(code) != 6 || strings.Trim(code, "0123456789") != "" {
 			writeError(w, http.StatusBadRequest, errors.New("the code is the 6 digits your app shows now"))
 			return
 		}
-		args = []string{"identity", "authenticator", "confirm", "--email", req.Email, "--code", code}
+		args = []string{"identity", "authenticator", "confirm", "--user", req.Email, "--code", code}
 	case "authenticator-off":
-		args = []string{"--yes", "identity", "authenticator", "off", "--email", req.Email}
+		args = []string{"--yes", "identity", "authenticator", "off", "--user", req.Email}
 	case "recovery-codes":
-		args = []string{"--yes", "--format", "json", "identity", "recovery-codes", "--email", req.Email}
+		args = []string{"--yes", "--format", "json", "identity", "recovery-codes", "--user", req.Email}
 	case "email":
 		if !identityEmailPattern.MatchString(req.NewEmail) {
 			writeError(w, http.StatusBadRequest, errors.New("give the new email address"))
 			return
 		}
-		args = []string{"--yes", "identity", "email", "--email", req.Email, "--new-email", req.NewEmail}
+		args = []string{"--yes", "identity", "email", "--user", req.Email, "--new-email", req.NewEmail}
 		if name := strings.TrimSpace(req.Name); name != "" {
 			if len(name) > 200 || strings.ContainsAny(name, "\n\r'") {
 				writeError(w, http.StatusBadRequest, errors.New("a name is up to 200 characters on one line"))
@@ -1006,6 +1012,12 @@ func (s *Server) handleIdentityAction(w http.ResponseWriter, r *http.Request, ac
 			}
 			args = append(args, "--name", name)
 		}
+	case "username":
+		if !identityUsernamePattern.MatchString(req.NewUsername) {
+			writeError(w, http.StatusBadRequest, errors.New("a username is a-z, 0-9, '.', '_' and '-', starting with a letter or digit"))
+			return
+		}
+		args = []string{"--yes", "identity", "username", "--user", req.Email, "--new", req.NewUsername}
 	default:
 		writeError(w, http.StatusNotFound, errors.New("unknown sign-in action"))
 		return
