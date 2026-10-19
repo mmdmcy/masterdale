@@ -51,7 +51,9 @@ go run ./cmd/dale up
 ```
 
 `dale up` runs in the foreground. Leave that terminal open while using the
-agent; press Ctrl-C to stop it.
+agent; press Ctrl-C to stop it. A new `.env` keeps remote command execution
+off (`DALE_REMOTE_EXEC=0`); `dale up --exec` turns it on, and an existing
+`.env` keeps whatever it says.
 
 In another terminal:
 
@@ -144,6 +146,12 @@ Masterdale is built for private networks, not direct public exposure.
   when configured for a browser, an allowlisted LinuxMice OIDC session.
 - File APIs stay inside configured safe roots and refuse known secret/runtime filenames.
 - Remote command execution requires `DALE_REMOTE_EXEC=1`, safe roots, timeouts, and clear operator intent.
+- Loopback is trusted by design: a direct loopback JSON request from any
+  local process on the device passes without a token, `/v1/exec` included,
+  as that process could run the command itself. Browsers are kept out of
+  that path (loopback Origin, JSON only, no proxied requests), and
+  state-changing JSON endpoints refuse a cross-site browser post even with
+  the session cookie.
 - `comdale` drafts and plans only; it does not publish or contact customers automatically.
 - Vault actions need a signed-in OIDC session: the device token and local
   requests are refused. The phone's approval endpoint is authorised by a

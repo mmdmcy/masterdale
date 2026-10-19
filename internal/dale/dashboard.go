@@ -156,6 +156,9 @@ func (s *Server) handleDashboardAsk(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}
+	if !jsonPost(w, r) {
+		return
+	}
 	var req dashboardAskRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, err)

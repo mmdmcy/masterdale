@@ -301,6 +301,9 @@ func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
 		events, err := s.store.List(limit)
 		writeResult(w, events, err)
 	case http.MethodPost:
+		if !jsonPost(w, r) {
+			return
+		}
 		var e Event
 		if err := json.NewDecoder(r.Body).Decode(&e); err != nil {
 			writeError(w, http.StatusBadRequest, err)
@@ -340,6 +343,9 @@ func (s *Server) handleTasks(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}
+	if !jsonPost(w, r) {
+		return
+	}
 	var body map[string]any
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeError(w, http.StatusBadRequest, err)
@@ -355,6 +361,9 @@ func (s *Server) handleTasks(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleComplete(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	if !jsonPost(w, r) {
 		return
 	}
 	var req CompleteRequest
@@ -390,9 +399,17 @@ func (s *Server) handleNPMScan(w http.ResponseWriter, r *http.Request) {
 			packages = []string{pkg}
 		}
 	}
-	roots := r.URL.Query()["root"]
-	if len(roots) == 0 {
-		roots = s.cfg.SafeRoots
+	roots := s.cfg.SafeRoots
+	if requested := r.URL.Query()["root"]; len(requested) > 0 {
+		roots = make([]string, 0, len(requested))
+		for _, root := range requested {
+			safe, err := safePath(s.cfg.SafeRoots, root)
+			if err != nil {
+				writeError(w, http.StatusBadRequest, err)
+				return
+			}
+			roots = append(roots, safe)
+		}
 	}
 	writeJSON(w, http.StatusOK, ScanNPM(roots, packages, 5000))
 }
@@ -427,9 +444,19 @@ func (s *Server) handleFSSearch(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, result)
 }
 
+// handleExec runs a command on this device. The loopback trust boundary is
+// deliberate: a direct loopback JSON POST passes authMiddleware without a
+// token (isTrustedLoopbackRequest), so any local process on the device can
+// run commands through the agent, exactly as it could run them itself. Only
+// browsers are kept out: a page cannot send loopback JSON without a
+// preflight, and jsonPost refuses a same-site page's text/plain post that
+// rides on the SameSite=Lax session cookie.
 func (s *Server) handleExec(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	if !jsonPost(w, r) {
 		return
 	}
 	if !RemoteExecEnabled() && !isLoopbackRequest(r) {
@@ -457,6 +484,19 @@ func (s *Server) handleGitAudit(w http.ResponseWriter, r *http.Request) {
 	}
 	fetch := r.URL.Query().Get("fetch") == "1" || strings.EqualFold(r.URL.Query().Get("fetch"), "true")
 	writeJSON(w, http.StatusOK, AuditGitRepos(root, fetch))
+}
+
+// jsonPost refuses a browser's cross-site post before a JSON handler reads
+// it. The session cookie is SameSite=Lax, so a page on another port of the
+// same host could otherwise post text/plain with the cookie attached. The
+// dale CLI, lmice and MCP clients send application/json and no Origin, which
+// sameOriginJSON accepts.
+func jsonPost(w http.ResponseWriter, r *http.Request) bool {
+	if sameOriginJSON(r) {
+		return true
+	}
+	writeError(w, http.StatusForbidden, errors.New("this endpoint needs a same-origin JSON request"))
+	return false
 }
 
 func writeResult(w http.ResponseWriter, v any, err error) {

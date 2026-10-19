@@ -690,8 +690,6 @@ func linuxmiceJobArgs(req LinuxMiceJobRequest) ([]string, bool, error) {
 	return nil, false, errors.New("unknown job kind")
 }
 
-// sameOriginJSON rejects cross-site form posts: the body must be JSON, and a
-// browser's Origin header must name this host.
 // linuxmiceLocal returns this node's LinuxMice device name, cached like a view.
 func (s *Server) linuxmiceLocal(ctx context.Context) string {
 	args := linuxmiceViews["integrations-local"]
@@ -713,6 +711,8 @@ func (s *Server) linuxmiceLocal(ctx context.Context) string {
 	return report.Device
 }
 
+// sameOriginJSON rejects cross-site form posts: the body must be JSON, and a
+// browser's Origin header must name this host.
 func sameOriginJSON(r *http.Request) bool {
 	if !strings.HasPrefix(r.Header.Get("Content-Type"), "application/json") {
 		return false

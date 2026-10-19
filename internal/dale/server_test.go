@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 )
@@ -236,5 +237,79 @@ func TestServerRemoteScopePublic(t *testing.T) {
 	server.Handler().ServeHTTP(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected explicit public scope to pass health: %d %s", w.Code, w.Body.String())
+	}
+}
+
+// signInBrowser signs a tailnet browser in through a local one-time link
+// and returns its session cookie.
+func signInBrowser(t *testing.T, handler http.Handler) *http.Cookie {
+	t.Helper()
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, signinRequest(http.MethodPost, "/v1/session/link", "{}", "127.0.0.1:4000"))
+	var link struct {
+		URL string `json:"url"`
+	}
+	_ = json.Unmarshal(rec.Body.Bytes(), &link)
+	if rec.Code != http.StatusOK || !strings.Contains(link.URL, "/auth/link/") {
+		t.Fatalf("local link: %d %s", rec.Code, rec.Body)
+	}
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, signinRequest(http.MethodGet, link.URL[strings.Index(link.URL, "/auth/link/"):], "", tailnetBrowser))
+	session := cookieNamed(rec, sessionCookie)
+	if session == nil {
+		t.Fatalf("opening the link: %d", rec.Code)
+	}
+	return session
+}
+
+func TestExecRefusesACookiePostFromAnotherPort(t *testing.T) {
+	t.Setenv("DALE_REMOTE_EXEC", "1")
+	server := linuxmiceTestServer(t)
+	server.cfg.SafeRoots = []string{t.TempDir()}
+	server.token = newTokenSource("device-token")
+	handler := server.Handler()
+	session := signInBrowser(t, handler)
+
+	// A page on another port of the same host posts text/plain with the
+	// SameSite=Lax session cookie attached: refused before anything runs.
+	req := signinRequest(http.MethodPost, "/v1/exec", `{"command":"true"}`, tailnetBrowser, session)
+	req.Header.Set("Content-Type", "text/plain")
+	req.Header.Set("Origin", "http://"+req.Host+":9999")
+	req.Header.Set("Sec-Fetch-Site", "same-site")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("cross-port cookie post: %d %s", rec.Code, rec.Body)
+	}
+
+	// The fleet page's own JSON post keeps working.
+	req = signinRequest(http.MethodPost, "/v1/exec", `{"command":"true"}`, tailnetBrowser, session)
+	req.Header.Set("Origin", "http://"+req.Host)
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("same-origin cookie post: %d %s", rec.Code, rec.Body)
+	}
+
+	// The dale CLI: bearer token, JSON, no Origin.
+	req = signinRequest(http.MethodPost, "/v1/exec", `{"command":"true"}`, tailnetBrowser)
+	req.Header.Set("Authorization", "Bearer device-token")
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("bearer post: %d %s", rec.Code, rec.Body)
+	}
+}
+
+func TestNPMScanRootStaysInsideSafeRoots(t *testing.T) {
+	server := linuxmiceTestServer(t)
+	server.cfg.SafeRoots = []string{t.TempDir()}
+	handler := server.Handler()
+	for root, want := range map[string]int{"/etc": http.StatusBadRequest, "": http.StatusOK, "sub/../": http.StatusOK} {
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, signinRequest(http.MethodGet, "/v1/scans/npm?package=left-pad&root="+root, "", "127.0.0.1:4000"))
+		if rec.Code != want {
+			t.Fatalf("root %q: %d %s", root, rec.Code, rec.Body)
+		}
 	}
 }

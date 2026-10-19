@@ -231,7 +231,7 @@ func up(cfg dale.Config, store *dale.Store, args []string) error {
 	restart := hasFlag(args, "--restart")
 	background := hasFlag(args, "--background") || hasFlag(args, "--detach")
 	listen := "0.0.0.0:" + strconv.Itoa(port)
-	if err := ensureEnvForUp(); err != nil {
+	if err := ensureEnvForUp(hasFlag(args, "--exec")); err != nil {
 		return err
 	}
 	if path, ok := envfile.FindUp(".env"); ok {
@@ -356,19 +356,26 @@ func status(args []string) error {
 	return nil
 }
 
-func ensureEnvForUp() error {
+// ensureEnvForUp creates .env or adds what it lacks. Remote exec stays off
+// (DALE_REMOTE_EXEC=0) unless `dale up --exec` asks for it; an existing
+// setting is left alone otherwise.
+func ensureEnvForUp(remoteExec bool) error {
+	remoteExecValue := "0"
+	if remoteExec {
+		remoteExecValue = "1"
+	}
 	path, ok := envfile.FindUp(".env")
 	if !ok {
 		token, err := randomHex(32)
 		if err != nil {
 			return err
 		}
-		content := "# Masterdale local secrets. Do not commit this file.\n\nDALE_TOKEN=" + token + "\nDALE_REMOTE_EXEC=1\nDALE_REMOTE_SCOPE=private\nMASTERDALE_URL=http://127.0.0.1:7345\nLEARDALE_URL=http://127.0.0.1:7345\n"
+		content := "# Masterdale local secrets. Do not commit this file.\n\nDALE_TOKEN=" + token + "\nDALE_REMOTE_EXEC=" + remoteExecValue + "\nDALE_REMOTE_SCOPE=private\nMASTERDALE_URL=http://127.0.0.1:7345\nLEARDALE_URL=http://127.0.0.1:7345\n"
 		if err := os.WriteFile(".env", []byte(content), 0o600); err != nil {
 			return err
 		}
 		_ = os.Setenv("DALE_TOKEN", token)
-		_ = os.Setenv("DALE_REMOTE_EXEC", "1")
+		_ = os.Setenv("DALE_REMOTE_EXEC", remoteExecValue)
 		_ = os.Setenv("DALE_REMOTE_SCOPE", "private")
 		return nil
 	}
@@ -393,8 +400,13 @@ func ensureEnvForUp() error {
 		text = appendEnvLine(text, "MASTERDALE_URL=http://127.0.0.1:7345")
 		_ = os.Setenv("MASTERDALE_URL", "http://127.0.0.1:7345")
 	}
-	text = setEnvLine(text, "DALE_REMOTE_EXEC", "1")
-	_ = os.Setenv("DALE_REMOTE_EXEC", "1")
+	if remoteExec {
+		text = setEnvLine(text, "DALE_REMOTE_EXEC", "1")
+		_ = os.Setenv("DALE_REMOTE_EXEC", "1")
+	} else if !strings.Contains(text, "DALE_REMOTE_EXEC=") {
+		text = appendEnvLine(text, "DALE_REMOTE_EXEC=0")
+		_ = os.Setenv("DALE_REMOTE_EXEC", "0")
+	}
 	return os.WriteFile(path, []byte(text), 0o600)
 }
 
@@ -1220,7 +1232,7 @@ func printUsage() {
 	fmt.Println(`dale commands:
   init
   env init
-  up [--background|--detach] [--restart] [--port 7345]
+  up [--background|--detach] [--restart] [--exec] [--port 7345]
   down
   status [--port 7345]
   serve [--listen 127.0.0.1:7345]

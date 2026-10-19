@@ -18,6 +18,9 @@ func (s *Server) handleMCP(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}
+	if !jsonPost(w, r) {
+		return
+	}
 	var req rpcRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeJSON(w, http.StatusBadRequest, rpcError(nil, -32700, err.Error()))

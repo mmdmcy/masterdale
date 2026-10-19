@@ -69,7 +69,10 @@ Remote command execution is the sharpest tool in the project.
 
 Rules:
 
-- Disabled unless `DALE_REMOTE_EXEC=1`.
+- Disabled unless `DALE_REMOTE_EXEC=1` (`dale up --exec` sets it; `dale up`
+  alone keeps a new `.env` at `0`).
+- Loopback requests are exempt: any local process can run commands through
+  the agent without a token, by design, as it could run them itself.
 - CWD must resolve inside configured safe roots.
 - Commands time out.
 - Output is truncated.

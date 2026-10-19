@@ -19,7 +19,9 @@ go run ./cmd/dale up
 
 `dale up` is a foreground session by default. Keep that terminal open while the
 agent should be reachable; press Ctrl-C to stop it. It does not install a
-startup item or relaunch itself after reboot.
+startup item or relaunch itself after reboot. A new `.env` gets
+`DALE_REMOTE_EXEC=0`; pass `--exec` to turn remote command execution on. An
+existing `DALE_REMOTE_EXEC` setting is left alone without `--exec`.
 
 Copy the generated `DALE_TOKEN` into `.env` on every device that should join the same private fleet.
 
