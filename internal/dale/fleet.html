@@ -2012,8 +2012,11 @@
       });
       view.querySelectorAll(".panel, .card").forEach((box) => { box.hidden = !hits(box); });
       $("cards").querySelectorAll(".card").forEach((card) => { card.hidden = !hits(card); });
+      // A table whose rows are all hidden goes too (its header alone says nothing).
+      view.querySelectorAll(".scroll").forEach((box) => { const rows = box.querySelectorAll("tbody tr"); if (rows.length) box.hidden = ![...rows].some((row) => !row.hidden); });
       let none = view.querySelector(".search-none");
-      const empty = q && view.children.length && ![...view.querySelectorAll(".panel, .card, tbody tr")].some((el) => !el.hidden) && !hits(view);
+      const rest = [...view.children].filter((el) => !el.classList.contains("search-none"));
+      const empty = q && rest.length && ![...view.querySelectorAll(".panel, .card, tbody tr")].some((el) => !el.hidden) && !rest.some((el) => !el.matches(".panel, .card, .scroll") && hits(el));
       if (empty && !none) { none = document.createElement("div"); none.className = "empty search-none"; view.prepend(none); }
       if (none) { none.hidden = !empty; none.textContent = `Nothing on this page matches "${$("search").value.trim()}".`; }
     }
