@@ -481,12 +481,25 @@
         `<td>${fan ? `${fan.rpm}${fan.max_rpm ? ` / ${fan.max_rpm}` : ""} rpm` : `<span class="muted">n/a</span>`}</td>` +
         `<td class="detail">${esc(h.detail)}${h.top_processes.length ? `<br>busiest: ${esc(h.top_processes.slice(0, 3).map((p) => `${p.command} ${p.cpu_percent.toFixed(0)}%`).join(", "))}` : ""}${h.battery ? `<br>battery ${h.battery.percent}% ${esc(h.battery.state)}` : ""}</td>`;
     }
+    // Health comes separately (it asks every device). A cached answer is
+    // shown at once and asked again until a fresh one arrives; a failure is
+    // shown instead of "loading" forever.
+    function loadHealth(tries) {
+      state.healthLoading = true;
+      api("/v1/linuxmice/health").then((view) => {
+        state.views.health = view;
+        state.healthLoading = false;
+        if (view.stale && tries < 10) setTimeout(() => { if (state.tab === "devices") loadHealth(tries + 1); }, 3000);
+        if (state.tab === "devices") render();
+      }).catch((error) => {
+        state.views.health = { available: true, error: `health: ${error.message}` };
+        state.healthLoading = false;
+        if (state.tab === "devices") render();
+      });
+    }
     function renderDevices(data) {
       const health = state.views.health?.data?.devices || [];
-      if (!state.views.health && !state.healthLoading) {
-        state.healthLoading = true;
-        api("/v1/linuxmice/health").then((view) => { state.views.health = view; state.healthLoading = false; if (state.tab === "devices") render(); }).catch(() => { state.healthLoading = false; });
-      }
+      if (!state.views.health && !state.healthLoading) loadHealth(0);
       const healthMeta = state.views.health ? `<div class="meta">${meta(state.views.health)}</div>` : "";
       $("view").innerHTML = healthMeta + `<div class="scroll"><table><thead><tr><th>Device</th><th>SSH</th><th>Health</th><th>CPU load</th><th>Memory</th><th>Disk</th><th>Temp</th><th>Fan</th><th>Detail</th></tr></thead><tbody>${data.devices.map((d) => {
         const h = health.find((x) => x.device === d.id);
