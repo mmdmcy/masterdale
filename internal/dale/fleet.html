@@ -115,7 +115,7 @@
     table { border-collapse: collapse; width: 100%; }
     /* Cells wrap, so a table fits the page instead of scrolling sideways. */
     th, td { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--line); white-space: normal; overflow-wrap: anywhere; vertical-align: top; }
-    th { overflow-wrap: normal; }
+    th, td .pill, td button { overflow-wrap: normal; white-space: nowrap; }
     th { background: var(--surface-2); font-weight: 600; position: sticky; top: 0; }
     tr.clickable { cursor: pointer; }
     tr.clickable:hover td { background: var(--surface-2); }
