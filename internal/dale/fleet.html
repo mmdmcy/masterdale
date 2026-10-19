@@ -81,6 +81,7 @@
     .tabs button.active { border-color: var(--accent); color: var(--accent); }
     .toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
     .toolbar input[type=search] { min-width: 0; flex: 1 1 180px; }
+    .jump { margin-top: -4px; }
     .vault-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 8px; }
     .vault-form input, .vault-form textarea { font: inherit; padding: 6px 10px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--bg); color: var(--text); width: 100%; }
     .vault-form textarea { grid-column: 1 / -1; min-height: 3em; }
@@ -260,11 +261,12 @@
   <main>
     <div class="page-head"><h2 id="pageTitle">Attention</h2><p id="pageLead"></p></div>
     <div class="toolbar" id="toolbar">
-      <input id="search" type="search" placeholder="Filter by name or path" aria-label="Filter">
+      <input id="search" type="search" placeholder="Search this page, or type a page name  ( / )" aria-label="Search this page or go to a page">
       <select id="verdict" aria-label="Verdict"><option value="!same" selected>Needs a look (not same)</option></select>
       <select id="hostDevice" aria-label="Device" style="display:none"></select>
       <button id="refresh" type="button">Refresh</button>
     </div>
+    <div class="toolbar jump" id="jump" hidden></div>
     <div class="cards" id="cards"></div>
     <div id="view"></div>
     <div class="meta command" id="meta">loading…</div>
@@ -381,7 +383,7 @@
       const name = viewName();
       const view = state.tab === "selfhost" ? state.views[`selfhost:${state.selfhostDevice}`] : state.views[name];
       $("verdict").style.display = state.tab === "repos" || state.tab === "folders" ? "" : "none";
-      $("search").style.display = ["repos", "folders", "selfhost", "integrations", "tools", "projects"].includes(state.tab) ? "" : "none";
+      $("search").style.display = "";
       $("hostDevice").style.display = state.tab === "selfhost" ? "" : "none";
       $("meta").innerHTML = meta(view);
       $("cards").innerHTML = "";
@@ -1250,7 +1252,8 @@
     ];
     function renderVault() {
       const v = state.vault, d = v.data;
-      ["verdict", "search", "hostDevice"].forEach((id) => { $(id).style.display = "none"; });
+      ["verdict", "hostDevice"].forEach((id) => { $(id).style.display = "none"; });
+      $("search").style.display = "";
       $("cards").innerHTML = "";
       if (!d) { $("view").innerHTML = `<div class="empty">${esc(v.message || "Reading the vault…")}</div>`; return; }
       if (!d.ready) { $("view").innerHTML = `<div class="empty">The vault isn't set up on this node yet. Run <code>lmice vault init</code> on it.</div>`; return; }
@@ -1258,19 +1261,19 @@
       const when = (t) => new Date(t * 1000).toLocaleTimeString();
       const requests = d.requests.map((r) => `<div class="panel">${pill("warn")} <b>${esc(r.via)}</b> wants <b>${esc(r.secret)}</b> for <code>${esc(r.purpose)}</code> <span class="muted">(${esc(when(r.at))})</span><div class="toolbar">${[["allow", "Allow once"], ["hour", "Allow for an hour"], ["deny", "Deny"]].map(([a, label]) => `<button data-vault-decide="${a}" data-id="${esc(r.id)}" type="button"${a === "deny" ? ' class="danger"' : ""}>${label}</button>`).join("")}</div></div>`).join("");
       const counts = Object.fromEntries(d.vaults.map((name) => [name, d.entries.filter((e) => e.vault === name).length]));
-      const text = v.filter.toLowerCase();
-      const entries = d.entries.filter((e) => e.vault === v.which && (!text || `${e.name} ${e.user} ${(e.domains || []).join(" ")}`.toLowerCase().includes(text)));
-      const rows = entries.map((e) => `<tr><td><b>${esc(e.name)}</b><br><span class="muted">${esc(e.kind)}${e.ask ? ", asks first" : ""}${e.changed ? `, changed ${esc(e.changed)}` : ""}</span></td>
+      // Searching looks in every vault; without a search, the chosen one.
+      const text = filterText();
+      const entries = d.entries.filter((e) => text ? `${e.vault}/${e.name} ${e.user} ${(e.domains || []).join(" ")} ${e.kind}`.toLowerCase().includes(text) : e.vault === v.which);
+      const rows = entries.map((e) => `<tr><td><b>${text ? `${esc(e.vault)}/` : ""}${esc(e.name)}</b><br><span class="muted">${esc(e.kind)}${e.ask ? ", asks first" : ""}${e.changed ? `, changed ${esc(e.changed)}` : ""}</span></td>
         <td>${e.user ? `${esc(e.user)} <button data-vault-copy-user="${esc(e.name)}" type="button" title="Copy the user name">Copy</button>` : '<span class="muted">none</span>'}</td>
         <td class="detail">${(e.domains || []).length ? esc(e.domains.join(", ")) : '<span class="muted">no sites, so agents never fill it</span>'}</td>
         <td><div class="toolbar">${VAULT_USES.map(([use, label, tip]) => `<button class="${(e.agents_may || []).includes(use) ? "active" : ""}" data-vault-use="${use}" data-name="${esc(e.name)}" type="button" title="${esc(tip)}" ${canChange ? "" : "disabled"}>${label}</button>`).join("")}</div></td>
-        <td class="actions"><div class="toolbar"><button class="primary" data-vault-copy="${esc(e.name)}" type="button">Copy password</button><button data-vault-show="${esc(e.name)}" type="button" title="Show it here for 30 seconds">Show</button>${e.has_totp ? `<button data-vault-code="${esc(e.name)}" type="button">Copy code</button>` : ""}<button data-vault-edit="${esc(e.name)}" type="button">Edit</button></div></td></tr>`).join("");
+        <td class="actions"><div class="toolbar"><button class="primary" data-vault-copy="${esc(e.name)}" type="button">${e.kind === "token" ? "Copy token" : "Copy password"}</button><button data-vault-show="${esc(e.name)}" type="button" title="Show it here for 30 seconds">Show</button>${e.has_totp ? `<button data-vault-code="${esc(e.name)}" type="button">Copy code</button>` : ""}<button data-vault-edit="${esc(e.name)}" type="button">Edit</button></div></td></tr>`).join("");
       const changes = state.views.changes?.data?.changes || [];
       const uses = changes.filter((c) => /vault/.test(`${c.action} ${c.change || ""} ${c.command || ""}`)).slice(0, 12);
       const purpose = v.which && v.which !== "personal" ? v.which : "yourself";
       $("view").innerHTML = requests +
         `<div class="toolbar vault-switch">${d.vaults.map((name) => `<button data-vault-which="${esc(name)}" class="${name === v.which ? "active" : ""}" type="button">${esc(name)} (${counts[name]})</button>`).join("")}
-          <input id="vaultFilter" type="search" placeholder="Find a login" aria-label="Find a login" value="${esc(v.filter)}">
           <button class="primary" data-vault-new type="button" ${canChange ? "" : "disabled"}>Add login</button>
           <span class="muted" id="vaultMessage" role="status">${esc(v.message)}</span></div>` +
         `<div class="toolbar vault-switch"><span class="muted">Agents and the ${esc(v.which)} vault:</span>${[["use", "Use it"], ["ask", "Ask me each time"], ["never", "Never"]].map(([p, label]) => `<button data-vault-agents="${p}" class="${(d.agents || {})[v.which] === p ? "active" : ""}" type="button" ${canChange ? "" : "disabled"}>${label}</button>`).join("")}</div>` +
@@ -1282,8 +1285,6 @@
         `<div class="panel"><h3>Sign-in client secrets</h3><p class="muted">The secret an app (like Masterdale) uses with this machine's identity server. Rotating writes a new one into the app's settings file and restarts the app; nobody sees it.</p>
           <form class="vault-form" id="vaultClient"><label>Client <input name="client" required placeholder="masterdale"></label><label>Variable <input name="key" required placeholder="DALE_OIDC_CLIENT_SECRET"></label><label>Service (optional) <input name="service" placeholder="masterdale"></label><div class="toolbar"><button type="submit" ${canChange ? "" : "disabled"}>Rotate…</button><span class="muted" id="vaultClientMessage" role="status"></span></div></form></div>` +
         `<div class="panel"><p>Agents use a login by name and never see the value. <b>Web</b>: LinuxMice makes the request to the login's own sites and gives the agent only the answer (<code>lmice vault http</code>). <b>Fill</b>: typed into the login form on its own sites, in agent desktops. <b>Code</b>: the current one-time code. <b>Command</b>: the value goes into one command, which can read it, so it is off unless you turn it on. Personal, katteke and work are separate, each with its own key; the backup key on the Mac can read all three. Every use is recorded.</p></div>`;
-      const filter = $("vaultFilter");
-      filter.addEventListener("input", () => { v.filter = filter.value; const at = filter.selectionStart; renderVault(); const again = $("vaultFilter"); again.focus(); again.setSelectionRange(at, at); });
       const form = $("vaultForm");
       if (form) form.addEventListener("submit", saveVaultForm);
     }
@@ -1603,6 +1604,7 @@
     };
     function setTab(tab, push = true) {
       if (!PAGES[tab]) tab = "attention";
+      if (state.tab !== tab) $("search").value = "";
       state.tab = tab;
       document.querySelectorAll("#tabs button[data-tab]").forEach((b) => {
         const on = b.dataset.tab === tab;
@@ -1986,7 +1988,46 @@
       select.value = current;
     }
     $("hostDevice").addEventListener("change", () => { state.selfhostDevice = $("hostDevice").value; load(false); });
-    $("search").addEventListener("input", render);
+    // Search: pages with their own filter (repos, folders, ...) use it;
+    // every other page hides the rows and panels that don't match. Page
+    // names that match are offered as "Go to"; Enter opens the first.
+    const OWN_FILTER = ["repos", "folders", "selfhost", "integrations", "tools", "projects", "vault"];
+    function pageMatches(q) {
+      if (!q) return [];
+      return Object.entries(PAGES).filter(([tab, [title, lead]]) => tab !== state.tab && `${tab} ${title} ${lead}`.toLowerCase().includes(q))
+        .sort(([, [a]], [, [b]]) => (b.toLowerCase().startsWith(q) - a.toLowerCase().startsWith(q))).slice(0, 6);
+    }
+    function applySearch() {
+      const q = filterText();
+      const pages = pageMatches(q);
+      $("jump").hidden = !pages.length;
+      $("jump").innerHTML = pages.length ? `<span class="muted">Go to</span>${pages.map(([tab, [title]]) => `<button data-goto="${esc(tab)}" type="button">${esc(title)}</button>`).join("")}` : "";
+      if (OWN_FILTER.includes(state.tab)) return;
+      const hits = (el) => !q || el.textContent.toLowerCase().includes(q);
+      const view = $("view");
+      view.querySelectorAll("tbody tr").forEach((row) => { row.hidden = !hits(row); });
+      view.querySelectorAll(".panel, .card, details").forEach((box) => {
+        const title = box.querySelector("h3, summary, strong");
+        if (title && q && title.textContent.toLowerCase().includes(q)) { box.querySelectorAll("tbody tr").forEach((row) => { row.hidden = false; }); }
+      });
+      view.querySelectorAll(".panel, .card").forEach((box) => { box.hidden = !hits(box); });
+      $("cards").querySelectorAll(".card").forEach((card) => { card.hidden = !hits(card); });
+      let none = view.querySelector(".search-none");
+      const empty = q && view.children.length && ![...view.querySelectorAll(".panel, .card, tbody tr")].some((el) => !el.hidden) && !hits(view);
+      if (empty && !none) { none = document.createElement("div"); none.className = "empty search-none"; view.prepend(none); }
+      if (none) { none.hidden = !empty; none.textContent = `Nothing on this page matches "${$("search").value.trim()}".`; }
+    }
+    let searchQueued = false;
+    new MutationObserver(() => { if (searchQueued) return; searchQueued = true; requestAnimationFrame(() => { searchQueued = false; applySearch(); }); }).observe($("view"), { childList: true, subtree: true });
+    $("search").addEventListener("input", () => { if (OWN_FILTER.includes(state.tab)) render(); applySearch(); });
+    $("search").addEventListener("keydown", (event) => {
+      if (event.key === "Enter") { const first = $("jump").querySelector("button[data-goto]"); if (first) setTab(first.dataset.goto); }
+      if (event.key === "Escape") { $("search").value = ""; $("search").dispatchEvent(new Event("input")); }
+    });
+    $("jump").addEventListener("click", (event) => { const go = event.target.closest("button[data-goto]"); if (go) setTab(go.dataset.goto); });
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "/" && !event.target.closest("input, textarea, select, [contenteditable]")) { event.preventDefault(); $("search").focus(); }
+    });
     $("verdict").addEventListener("change", render);
     $("refresh").addEventListener("click", () => { if (state.tab === "move") { state.move.result = null; } if (state.tab === "devices") { state.views.health = null; } load(true); });
     $("diffRun").addEventListener("click", runDiff);
