@@ -960,10 +960,23 @@
         `<div class="panel"><p>Backups that live on another machine (a server), pulled here with a key that can only read their backup folder. Only the copies the retention keeps are fetched, each is checked against its checksum, and older ones are removed, so this stays small. ${data.scheduled ? "Pulled daily around 10:30." : "Not scheduled yet (<code>lmice backups schedule on</code>)."}</p><button data-backups-pull type="button" ${canChange ? "" : "disabled"}>Pull now…</button> ${jobButton("Prove they can be read…", "backups-verify", "lmice backups verify", "Test-decrypts the newest encrypted backups. Works on the machine that holds the backup key (the Mac's Masterdale).")}</div>`;
     }
 
+    // The Windows page lists Windows PCs only: plain Windows devices, and
+    // laptops still reached through a LinuxMice WSL device.
+    function windowsDevices() {
+      return (state.views.devices?.data?.devices || []).filter((d) => d.windows || /-wsl$/.test(d.id)).map((d) => d.id);
+    }
     async function loadDeviceView(kind, force) {
-      const devices = fleetDevices();
-      state.opsDevice = state.opsDevice || devices[0] || "";
+      ["verdict", "hostDevice"].forEach((id) => { $(id).style.display = "none"; });
+      if (kind === "windows" && !state.views.devices) {
+        try { state.views.devices = await api("/v1/linuxmice/devices"); } catch (_) { /* the list below says none */ }
+      }
+      const devices = kind === "windows" ? windowsDevices() : fleetDevices();
+      if (!devices.includes(state.opsDevice)) state.opsDevice = devices[0] || "";
       $("cards").innerHTML = "";
+      if (!devices.length) {
+        $("view").innerHTML = `<div class="empty">${kind === "windows" ? "No Windows PCs in the fleet yet. On the PC, run Let LinuxMice in.cmd from <code>lmice setup windows DIR</code>, then <code>lmice fleet join NAME --target USER@ADDRESS confirm</code>." : "No devices."}</div>`;
+        return;
+      }
       $("view").innerHTML = `<div class="panel"><div class="toolbar"><select id="opsDevice">${devices.map((d) => `<option ${d === state.opsDevice ? "selected" : ""}>${esc(d)}</option>`).join("")}</select><button id="opsReload" type="button">Reload</button><span class="muted" id="opsMessage" role="status">loading…</span></div></div><div id="opsResult"></div>`;
       $("opsDevice").addEventListener("change", () => { state.opsDevice = $("opsDevice").value; loadDeviceView(kind, false); });
       $("opsReload").addEventListener("click", () => loadDeviceView(kind, true));
