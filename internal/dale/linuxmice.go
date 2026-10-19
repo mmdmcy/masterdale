@@ -616,6 +616,15 @@ func linuxmiceJobArgs(req LinuxMiceJobRequest) ([]string, bool, error) {
 		return []string{"--yes", "--format", "json", "backups", "verify"}, true, nil
 	case "attention-notify":
 		return []string{"--yes", "attention", "notify"}, true, nil
+	case "windows-ssh-open", "windows-ssh-lock":
+		// Lock or unlock a Windows PC's LinuxMice access, by hand (ADR 0084).
+		if !linuxmiceDevicePattern.MatchString(req.Device) {
+			return nil, false, errors.New("pick a device")
+		}
+		if req.Kind == "windows-ssh-lock" {
+			return []string{"windows", "ssh", "off", "--device", req.Device}, true, nil
+		}
+		return []string{"windows", "ssh", "on", "--device", req.Device}, true, nil
 	case "windows-ssh":
 		if !linuxmiceDevicePattern.MatchString(req.Device) {
 			return nil, false, errors.New("pick a device")

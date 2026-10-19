@@ -337,7 +337,7 @@
     }
     function esc(value) { return String(value ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
     function bytes(n) { if (!n) return "0 B"; const u = ["B", "KB", "MB", "GB", "TB"]; let i = 0; while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; } return `${n.toFixed(i ? 1 : 0)} ${u[i]}`; }
-    const LEVEL = { core: "ok", alive: "ok", parked: "warn", retired: "", on: "ok", off: "", "logged in": "ok", "not logged in": "warn", same: "ok", ok: "ok", online: "ok", active: "ok", done: "ok", ready: "ok", info: "", repository: "", planned: "", dirty: "warn", behind: "warn", differs: "warn", "only-on": "warn", attention: "warn", warning: "warn", warn: "warn", "not-ready": "warn", unknown: "warn", diverged: "bad", offline: "bad", unreachable: "bad", unhealthy: "bad", error: "bad", failed: "bad", blocker: "bad", critical: "bad", "endpoint-outdated": "bad", missing: "warn", added: "ok", review: "warn", unavailable: "warn", skipped: "" };
+    const LEVEL = { core: "ok", alive: "ok", parked: "warn", retired: "", on: "ok", off: "", "logged in": "ok", "not logged in": "warn", same: "ok", ok: "ok", online: "ok", active: "ok", done: "ok", ready: "ok", info: "", repository: "", planned: "", dirty: "warn", behind: "warn", differs: "warn", "only-on": "warn", attention: "warn", warning: "warn", warn: "warn", "not-ready": "warn", unknown: "warn", diverged: "bad", offline: "bad", unreachable: "bad", unhealthy: "bad", error: "bad", locked: "", failed: "bad", blocker: "bad", critical: "bad", "endpoint-outdated": "bad", missing: "warn", added: "ok", review: "warn", unavailable: "warn", skipped: "" };
     function pill(code) { return `<span class="pill ${LEVEL[code] ?? ""}">${esc(code)}</span>`; }
     function meta(view) {
       if (!view) return "";
@@ -998,7 +998,15 @@
         if (view.error) throw new Error(view.error);
         $("opsMessage").textContent = view.data.detail || "";
         ({ services: showServices, ports: showPorts, display: showDisplay, windows: showWindows, schedules: showSchedules, inventory: showInventory })[kind](view.data);
-      } catch (error) { $("opsMessage").textContent = `failed: ${error.message}`; }
+      } catch (error) {
+        $("opsMessage").textContent = `failed: ${error.message}`;
+        // A locked Windows PC (ADR 0084): open it from here.
+        if (kind === "windows" && /is locked/.test(error.message)) {
+          const d = state.opsDevice;
+          $("opsMessage").textContent = `${d} is locked: LinuxMice's access is off.`;
+          $("opsResult").innerHTML = `<div class="panel"><p>Locked, its SSH answers one request only: unlock. Every request is logged on the PC. It stays locked until you unlock it.</p><div class="toolbar">${jobButton("Unlock LinuxMice's access…", "windows-ssh-open", `lmice windows ssh on --device ${d}`, `Gives LinuxMice its full access to ${d} again, until you lock it.`, { device: d })}</div></div>`;
+        }
+      }
     }
 
     function showServices(d) {
@@ -1034,7 +1042,7 @@
         <p><b>Starts with Windows</b> (${d.startup_programs.length})</p><ul>${list(d.startup_programs.map(esc))}</ul>
         <p><b>LinuxMice tasks</b></p><ul>${list(d.tasks.map(([t, s]) => `${esc(t)}: ${esc(s)}`))}</ul>
         <p class="muted">${d.wsl ? "Read through the device's LinuxMice WSL distribution (the older way; switch it with Let LinuxMice in below)" : "Read over the PC's own SSH as PowerShell; no WSL"}; nothing in Windows is changed. <code>lmice windows --device ${esc(d.device)}</code></p>
-        <div class="toolbar"><button data-windows-space="${esc(d.device)}" type="button">What fills C:?</button>${jobButton(d.wsl ? "Let LinuxMice in (Windows' own SSH)…" : "Check its SSH (tailnet, keys only)…", "windows-ssh", `lmice windows ssh --device ${d.device}`, d.wsl ? "Asks for administrator rights on the PC's screen (someone there clicks Yes), then turns on Windows' own SSH server: tailnet only, keys only, the fleet keys. Then the PC can be joined as plain Windows." : "Makes sure the PC's SSH server starts with Windows, takes only keys and only the tailnet, and knows the fleet keys. Changes nothing that is already so.", { device: d.device })}<span class="muted" id="spaceMessage" role="status"></span></div><pre class="detail" id="spaceResult" hidden></pre></div>`;
+        <div class="toolbar"><button data-windows-space="${esc(d.device)}" type="button">What fills C:?</button>${d.wsl ? "" : jobButton("Lock LinuxMice's access…", "windows-ssh-lock", `lmice windows ssh off --device ${d.device}`, "Locks it: LinuxMice can then run nothing there; its SSH only answers a request to unlock, which you make from here (Unlock). Every request is logged on the PC. It stays locked until you unlock it.", { device: d.device }, "danger")}${jobButton(d.wsl ? "Let LinuxMice in (Windows' own SSH)…" : "Check its SSH (tailnet, keys only)…", "windows-ssh", `lmice windows ssh --device ${d.device}`, d.wsl ? "Asks for administrator rights on the PC's screen (someone there clicks Yes), then turns on Windows' own SSH server: tailnet only, keys only, the fleet keys. Then the PC can be joined as plain Windows." : "Makes sure the PC's SSH server starts with Windows, takes only keys and only the tailnet, and knows the fleet keys. Changes nothing that is already so.", { device: d.device })}<span class="muted" id="spaceMessage" role="status"></span></div><pre class="detail" id="spaceResult" hidden></pre></div>`;
     }
 
     function showDisplay(d) {
