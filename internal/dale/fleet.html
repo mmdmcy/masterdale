@@ -963,7 +963,8 @@
     // The Windows page lists Windows PCs only: plain Windows devices, and
     // laptops still reached through a LinuxMice WSL device.
     function windowsDevices() {
-      return (state.views.devices?.data?.devices || []).filter((d) => d.windows || /-wsl$/.test(d.id)).map((d) => d.id);
+      return (state.views.devices?.data?.devices || []).filter((d) => d.windows || /-wsl$/.test(d.id))
+        .sort((a, b) => (b.state === "online") - (a.state === "online")).map((d) => d.id);
     }
     async function loadDeviceView(kind, force) {
       ["verdict", "hostDevice"].forEach((id) => { $(id).style.display = "none"; });
