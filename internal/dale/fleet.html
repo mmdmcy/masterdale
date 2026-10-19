@@ -56,13 +56,14 @@
     main { padding: 16px; max-width: 1400px; margin: 0 auto; }
     h3 { margin: 18px 0 8px; font-size: 15px; }
     .shell { display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 0; max-width: 1560px; margin: 0 auto; }
-    /* One scrollbar, the page's: the menu never scrolls on its own. It stays
-       in view while the page scrolls when it fits the window (.pinned, set
-       by the script), otherwise it scrolls along with the page. */
+    /* One scrollbar, the page's: the menu never scrolls on its own. It is
+       sticky; when it is taller than the window the script gives it a
+       negative top, so it scrolls with the page until its last item shows
+       and then stays. */
     html { scrollbar-width: thin; scrollbar-color: var(--line) var(--bg); }
-    nav.tabs { align-self: start; padding: 18px 12px 24px 16px; display: flex; flex-direction: column; gap: 2px; border-right: 1px solid var(--line); }
-    nav.tabs.pinned { position: sticky; top: 0; }
-    nav.tabs .group { margin: 14px 0 4px 2px; font-family: var(--readout); font-size: 11px; color: var(--muted); letter-spacing: .04em; }
+    nav.tabs { position: sticky; top: 0; align-self: start; padding: 14px 12px 16px 16px; display: flex; flex-direction: column; gap: 2px; border-right: 1px solid var(--line); }
+    nav.tabs button { padding-top: 4px; padding-bottom: 4px; }
+    nav.tabs .group { margin: 10px 0 3px 2px; font-family: var(--readout); font-size: 11px; color: var(--muted); letter-spacing: .04em; }
     nav.tabs .group:first-child { margin-top: 0; }
     nav.tabs button { text-align: left; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
     nav.tabs .count { font-size: 11px; padding: 0 5px; border: 1px solid currentColor; }
@@ -75,7 +76,7 @@
     .command { margin-top: 18px; border-top: 1px solid var(--line); padding-top: 8px; }
     @media (max-width: 900px) {
       .shell { display: block; }
-      nav.tabs, nav.tabs.pinned { position: static; flex-direction: row; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; border-right: 0; border-bottom: 1px solid var(--line); padding: 10px 16px; }
+      nav.tabs { position: static; flex-direction: row; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; border-right: 0; border-bottom: 1px solid var(--line); padding: 10px 16px; }
       nav.tabs::-webkit-scrollbar { display: none; }
       nav.tabs .group { display: none; }
       nav.tabs button { flex: 0 0 auto; }
@@ -1637,11 +1638,11 @@
       badge.className = `count ${critical ? "bad" : "warn"}`;
       badge.title = `${critical} critical, ${warn} warnings`;
     }
-    // The menu stays in view only when all of it fits the window; a taller
-    // menu scrolls with the page, so there is never a second scrollbar.
+    // A menu taller than the window sticks by its bottom edge instead of
+    // its top, so all of it is reachable without a second scrollbar.
     function pinMenu() {
       const nav = $("tabs"), zoom = parseFloat(document.documentElement.style.zoom) || 1;
-      nav.classList.toggle("pinned", nav.scrollHeight * zoom <= window.innerHeight);
+      nav.style.top = `${Math.min(0, Math.floor(window.innerHeight / zoom - nav.scrollHeight))}px`;
     }
     window.addEventListener("resize", pinMenu);
     new ResizeObserver(pinMenu).observe($("tabs"));
