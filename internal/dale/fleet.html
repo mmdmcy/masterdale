@@ -1049,8 +1049,10 @@
       const canChange = state.caps?.actions_enabled;
       const rows = d.connectors.map((c) => `<tr><td><b>${esc(c.name)}</b></td><td>${pill(c.status === "connected" ? "ok" : "unknown")} <span class="muted">${esc(c.status)}</span></td><td>${c.enabled ? "in use" : ""}</td><td>${c.virtual_screen ? "virtual screen" : ""}</td></tr>`).join("");
       const on = !!(d.virtual_connector && d.at_boot);
-      $("cards").innerHTML = `<div class="card"><strong>Virtual screen</strong><span>${on ? esc(`${d.virtual_connector}, ${d.virtual_size}`) : "off"}</span></div>`;
-      $("opsResult").innerHTML = `<div class="scroll"><table><thead><tr><th>Connector</th><th>State</th><th></th><th></th></tr></thead><tbody>${rows}</tbody></table></div><div class="panel"><p>A virtual screen lets remote desktop (RustDesk) work with no monitor or dummy plug: the graphics driver is told a monitor is on a free connector. It stays after restarts; nothing about the boot changes.</p><button data-display="${on ? "off" : "on"}" type="button" ${canChange && (on || d.supported) ? "" : "disabled"}>${on ? "Turn off…" : "Turn on…"}</button><p><code>lmice display --device ${esc(d.device)}</code> · <code>lmice display virtual on|off --device ${esc(d.device)}</code></p></div>`;
+      const layout = d.mirrors ? `, mirroring ${d.mirrors}` : d.extends_next_to ? `, next to ${d.extends_next_to}` : "";
+      $("cards").innerHTML = `<div class="card"><strong>Virtual screen</strong><span>${on ? esc(`${d.virtual_connector}, ${d.virtual_size}${layout}`) : "off"}</span></div>`;
+      const lost = on && d.extends_next_to ? `<p>${pill("warn")} It extends the desktop next to the real screen ${esc(d.extends_next_to)}, where nobody sees it: windows that open there get lost. Mirroring makes it show the same as ${esc(d.extends_next_to)}.</p><button data-display="on" type="button" ${canChange ? "" : "disabled"}>Make it mirror…</button>` : "";
+      $("opsResult").innerHTML = `<div class="scroll"><table><thead><tr><th>Connector</th><th>State</th><th></th><th></th></tr></thead><tbody>${rows}</tbody></table></div><div class="panel"><p>A virtual screen lets remote desktop (RustDesk) work with no monitor or dummy plug: the graphics driver is told a monitor is on a free connector. It stays after restarts; nothing about the boot changes. Next to a real screen it mirrors that screen.</p>${lost}<button data-display="${on ? "off" : "on"}" type="button" ${canChange && (on || d.supported) ? "" : "disabled"}>${on ? "Turn off…" : "Turn on…"}</button><p><code>lmice display --device ${esc(d.device)}</code> · <code>lmice display virtual on|off --device ${esc(d.device)}</code></p></div>`;
     }
 
     function renderCompareForm() {
@@ -1483,7 +1485,7 @@
       const b = event.target.closest("button[data-display]");
       if (!b) return;
       const action = b.dataset.display, device = state.opsDevice;
-      askConfirm(`lmice display virtual ${action} --device ${device}`, action === "on" ? "The desktop gets one more screen on a free connector, also after restarts." : "The virtual screen goes away; the files are kept.", async () => {
+      askConfirm(`lmice display virtual ${action} --device ${device}`, action === "on" ? "The desktop gets one more screen on a free connector, also after restarts; next to a real screen it mirrors it." : "The virtual screen goes away; the files are kept.", async () => {
         const job = await startJob({ kind: `display-${action}`, device });
         $("opsMessage").textContent = job.state === "done" ? `virtual screen ${action}` : `failed: ${job.view.error || ""}`;
         loadDeviceView("display", true);
