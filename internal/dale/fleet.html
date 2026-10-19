@@ -994,6 +994,7 @@
       $("opsReload").addEventListener("click", () => loadDeviceView(kind, true));
       try {
         const view = await api(`/v1/linuxmice/${kind}?device=${encodeURIComponent(state.opsDevice)}${force ? "&refresh=1" : ""}`);
+        $("meta").innerHTML = meta(view);
         if (view.error) throw new Error(view.error);
         $("opsMessage").textContent = view.data.detail || "";
         ({ services: showServices, ports: showPorts, display: showDisplay, windows: showWindows, schedules: showSchedules, inventory: showInventory })[kind](view.data);
