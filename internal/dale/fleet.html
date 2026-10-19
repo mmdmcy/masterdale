@@ -968,12 +968,19 @@
     }
     async function loadDeviceView(kind, force) {
       ["verdict", "hostDevice"].forEach((id) => { $(id).style.display = "none"; });
-      // The Windows list needs the devices' `windows` flag, so it is read
-      // fresh when the page opens (at most once a minute): a cached list
-      // from an older lmice would leave a PC out.
-      if (kind === "windows" && (force || !state.windowsListAt || Date.now() - state.windowsListAt > 60000)) {
-        state.windowsListAt = Date.now();
-        try { state.views.devices = await api("/v1/linuxmice/devices?refresh=1"); } catch (_) { /* the list below says none */ }
+      // The Windows list needs the devices' `windows` flag; a cached list
+      // from an older lmice lacks it, and is then read fresh.
+      const knowsWindows = (state.views.devices?.data?.devices || []).some((d) => d.windows);
+      if (kind === "windows" && (force || !knowsWindows)) {
+        // Say so at once: asking every device can take a few seconds when
+        // one is switched off.
+        $("cards").innerHTML = "";
+        $("view").innerHTML = `<div class="panel muted">Finding the Windows PCs…</div>`;
+        try { state.views.devices = await api(`/v1/linuxmice/devices${force || !state.views.devices ? "?refresh=1" : ""}`); } catch (_) { /* the list below says none */ }
+        if (!(state.views.devices?.data?.devices || []).some((d) => d.windows) && !force) {
+          try { state.views.devices = await api("/v1/linuxmice/devices?refresh=1"); } catch (_) { /* as above */ }
+        }
+        if (state.tab !== kind) return;
       }
       const devices = kind === "windows" ? windowsDevices() : fleetDevices();
       if (!devices.includes(state.opsDevice)) state.opsDevice = devices[0] || "";
