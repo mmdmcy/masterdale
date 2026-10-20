@@ -45,6 +45,37 @@ type vaultRef struct {
 	Field string `json:"field"`
 }
 
+// vaultAddArgs checks an add and makes its lmice arguments; the values go
+// in the payload, for lmice's stdin.
+func vaultAddArgs(req vaultAddRequest) ([]string, []byte, error) {
+	spec, err := vaultRef{Vault: req.Vault, Name: req.Name}.spec()
+	if err != nil {
+		return nil, nil, err
+	}
+	if req.Password == "" && req.Note == "" {
+		return nil, nil, errors.New("give a password or a note")
+	}
+	args := []string{"--yes", "vault", "add", spec, "--json"}
+	if user := strings.TrimSpace(req.User); user != "" {
+		if len(user) > 200 || strings.ContainsAny(user, "\r\n\x00") {
+			return nil, nil, errors.New("the user name is one line")
+		}
+		args = append(args, "--user", user)
+	}
+	for _, domain := range req.Domains {
+		domain = strings.ToLower(strings.TrimSpace(domain))
+		if domain == "" {
+			continue
+		}
+		if !vaultSitePattern.MatchString(domain) {
+			return nil, nil, fmt.Errorf("%q is not a site (example: github.com)", domain)
+		}
+		args = append(args, "--domain", domain)
+	}
+	payload, _ := json.Marshal(map[string]string{"password": req.Password, "totp": req.TOTP, "note": req.Note})
+	return args, payload, nil
+}
+
 func (ref vaultRef) spec() (string, error) {
 	if !vaultNamePattern.MatchString(ref.Vault) || !vaultSecretPattern.MatchString(ref.Name) {
 		return "", errors.New("pick a vault and a secret")
@@ -173,35 +204,11 @@ func (s *Server) handleVault(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, errors.New("invalid request"))
 			return
 		}
-		spec, err := vaultRef{Vault: req.Vault, Name: req.Name}.spec()
+		args, payload, err := vaultAddArgs(req)
 		if err != nil {
 			writeError(w, http.StatusBadRequest, err)
 			return
 		}
-		if req.Password == "" && req.Note == "" {
-			writeError(w, http.StatusBadRequest, errors.New("give a password or a note"))
-			return
-		}
-		args := []string{"--yes", "vault", "add", spec, "--json"}
-		if user := strings.TrimSpace(req.User); user != "" {
-			if len(user) > 200 || strings.ContainsAny(user, "\r\n\x00") {
-				writeError(w, http.StatusBadRequest, errors.New("the user name is one line"))
-				return
-			}
-			args = append(args, "--user", user)
-		}
-		for _, domain := range req.Domains {
-			domain = strings.ToLower(strings.TrimSpace(domain))
-			if domain == "" {
-				continue
-			}
-			if !vaultSitePattern.MatchString(domain) {
-				writeError(w, http.StatusBadRequest, fmt.Errorf("%q is not a site (example: github.com)", domain))
-				return
-			}
-			args = append(args, "--domain", domain)
-		}
-		payload, _ := json.Marshal(map[string]string{"password": req.Password, "totp": req.TOTP, "note": req.Note})
 		s.vaultChange(w, r, args, payload)
 	case "remove", "rotate", "push":
 		var ref vaultRef

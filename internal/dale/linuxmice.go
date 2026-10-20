@@ -66,6 +66,8 @@ var linuxmiceViews = map[string][]string{
 	"modules":      {"modules", "--format", "json"},
 	"net":          {"net", "--format", "json"},
 	"checkouts":    {"checkouts", "--format", "json"},
+	"flows":        {"flows", "--format", "json"},
+	"browsers":     {"browsers", "--fleet", "--format", "json"},
 	"github":       {"github", "--format", "json"},
 	"servers":      {"servers", "--format", "json"},
 	"tests":        {"tests", "--format", "json"},
@@ -91,8 +93,10 @@ var (
 	// A tool or application name (lmice tools / app ids).
 	linuxmiceToolPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{0,63}$`)
 	// USER@HOST for joining a device.
-	linuxmiceTargetPattern   = regexp.MustCompile(`^[a-z_][a-z0-9_-]{0,31}@[A-Za-z0-9][A-Za-z0-9.:-]{0,252}$`)
-	linuxmiceScheduleNames   = map[string]bool{"attention": true, "backups": true, "github": true, "tests": true, "fleet": true, "https": true}
+	linuxmiceTargetPattern = regexp.MustCompile(`^[a-z_][a-z0-9_-]{0,31}@[A-Za-z0-9][A-Za-z0-9.:-]{0,252}$`)
+	linuxmiceScheduleNames = map[string]bool{"attention": true, "backups": true, "github": true, "tests": true, "fleet": true, "https": true}
+	// A browser profile's id: "Default", "Profile 1", Firefox's folder.
+	linuxmiceProfilePattern  = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9 ._-]{0,63}$`)
 	linuxmiceServicePattern  = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9@._:-]{0,127}$`)
 	linuxmiceUpstreamPattern = regexp.MustCompile(`^http://[0-9]{1,3}(\.[0-9]{1,3}){3}:[0-9]{1,5}$`)
 )
@@ -557,6 +561,15 @@ func linuxmiceJobArgs(req LinuxMiceJobRequest) ([]string, bool, error) {
 			args = append(args, "--with-data")
 		}
 		return args, true, nil
+	case "browsers-add":
+		// ID is the extension, Device the device, A the browser, B the
+		// profile's id.
+		if !linuxmiceToolPattern.MatchString(req.ID) || !linuxmiceDevicePattern.MatchString(req.Device) || !linuxmiceToolPattern.MatchString(req.A) || !linuxmiceProfilePattern.MatchString(req.B) {
+			return nil, false, errors.New("pick an extension, a device, a browser and a profile")
+		}
+		return []string{"--yes", "--format", "json", "browsers", "add", req.ID, "--device", req.Device, "--browser", req.A, "--profile", req.B}, true, nil
+	case "browsers-update":
+		return []string{"--yes", "--format", "json", "browsers", "update", "--fleet"}, true, nil
 	case "checkouts-update":
 		if req.Device == "" {
 			return []string{"--yes", "--format", "json", "checkouts", "update"}, true, nil

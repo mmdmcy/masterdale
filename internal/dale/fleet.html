@@ -194,6 +194,70 @@
     [data-mode="night"] .page-head h2 { color: #cfc3ae; }
     [data-mode="night"] .tabs button.active { color: #000; }
     .mode-toggle { font-family: var(--readout); font-size: 11px; letter-spacing: .08em; }
+
+    /* Flows: every way data moves, drawn as blocks joined by conduits. The
+       conduit's line says how (solid on its own, dashed by hand, arrows at
+       both ends when it goes both ways) and its color what kind; a stale or
+       failed one turns to hazard stripes. */
+    :root { --k-sync: var(--accent); --k-backup: var(--ok); --k-git: #a879ff; --k-release: var(--warn); --k-vault: var(--muted); }
+    [data-mode="night"] { --k-git: #7a58b8; }
+    .fleet-strip { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px; margin-bottom: 18px; }
+    .node { display: grid; gap: 2px; text-align: left; padding: 8px 10px 8px 12px; border: 1px solid var(--line); background: var(--surface); color: var(--text); position: relative; clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 0 100%); min-width: 0; }
+    .node b { font-family: var(--title); font-weight: 900; font-size: 17px; letter-spacing: -.01em; transform: scaleY(1.1); transform-origin: left bottom; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .node small { font-family: var(--readout); font-size: 10px; color: var(--muted); letter-spacing: .06em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .node::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--line); }
+    .node.up::before { background: var(--ok); }
+    .node.down { color: var(--muted); }
+    .node.down b { opacity: .7; }
+    .node.outside { border-style: dashed; }
+    button.node.focus { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+    .lanes { display: grid; gap: 6px; margin-bottom: 18px; }
+    .lane { border: 1px solid var(--line); background: var(--surface); }
+    .lane > summary { list-style: none; cursor: pointer; display: grid; grid-template-columns: minmax(110px, 1fr) minmax(160px, 2.2fr) minmax(110px, 1fr) 92px; align-items: center; gap: 10px; padding: 8px 10px; }
+    .lane > summary::-webkit-details-marker { display: none; }
+    .lane > summary:hover { background: var(--surface-2); }
+    .lane > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+    .lane[open] { border-color: var(--k); }
+    .lane .end { font-family: var(--title); font-weight: 900; font-size: 16px; transform: scaleY(1.1); transform-origin: left bottom; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .lane .end.to { text-align: right; }
+    .conduit { position: relative; display: grid; gap: 3px; justify-items: center; min-width: 0; }
+    .conduit .wire { width: 100%; height: 0; border-top: 3px solid var(--k); position: relative; }
+    .conduit.manual .wire { border-top-style: dashed; border-top-width: 2px; opacity: .8; }
+    .conduit .wire::after, .conduit.both .wire::before { content: ""; position: absolute; top: -7px; border: 5px solid transparent; }
+    .conduit .wire::after { right: -2px; border-left: 8px solid var(--k); }
+    .conduit.both .wire::before { left: -2px; border-right: 8px solid var(--k); }
+    .conduit.alarm .wire { border-top: 0; height: 8px; background: var(--hazard); margin-top: -2px; }
+    .conduit.alarm .wire::after { top: -1px; }
+    .conduit.alarm.both .wire::before { top: -1px; }
+    .conduit .label { font-family: var(--readout); font-size: 11px; letter-spacing: .04em; color: var(--text); text-align: center; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .conduit .when { font-family: var(--readout); font-size: 10px; color: var(--muted); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .lane .state { justify-self: end; text-align: right; }
+    .lane .state small { display: block; font-family: var(--readout); font-size: 10px; color: var(--muted); margin-top: 2px; }
+    .lane .drawer { padding: 4px 14px 14px; border-top: 1px solid var(--line); display: grid; gap: 10px; }
+    .lane .facts { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 14px; margin: 8px 0 0; max-width: 90ch; }
+    .lane .facts dt { font-family: var(--readout); font-size: 11px; color: var(--k); padding-top: 2px; }
+    .lane .facts dd { margin: 0; line-height: 1.45; }
+    .blocks { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 4px; }
+    .block { border: 1px solid var(--line); border-left: 3px solid var(--k); padding: 5px 8px; min-width: 0; }
+    .block b { display: block; font-family: var(--readout); font-size: 12px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .block span { display: block; font-size: 11px; color: var(--muted); overflow-wrap: anywhere; }
+    .block.off { border-left-color: var(--line); color: var(--muted); }
+    .block.skip b { text-decoration: line-through; }
+    .kind-head { display: flex; align-items: baseline; gap: 10px; margin: 16px 0 6px; }
+    .kind-head h3 { margin: 0; border-left-color: var(--k); color: var(--k); }
+    .kind-head p { margin: 0; color: var(--muted); font-size: 12px; }
+    @media (max-width: 760px) {
+      .lane > summary { grid-template-columns: 1fr auto; grid-template-areas: "from state" "wire wire" "to to"; }
+      .lane .end.from { grid-area: from; }
+      .lane .state { grid-area: state; }
+      .lane .conduit { grid-area: wire; }
+      .lane .end.to { grid-area: to; text-align: left; }
+    }
+    /* Browsers: profiles against your extensions. */
+    .browser-grid td.cell { white-space: nowrap; }
+    .browser-grid td.cell .pill { margin-right: 4px; }
+    .browser-grid .pname b { font-family: var(--readout); }
+    .next-steps { margin: 6px 0 0; padding-left: 20px; line-height: 1.5; }
   </style>
   <script>
     // Display mode: auto (night 21:00-07:00), night (dim, no glow or
@@ -244,11 +308,13 @@
     <button data-tab="checkouts" type="button">Checkouts</button>
     <button data-tab="schedules" type="button">Schedules</button>
     <button data-tab="inventory" type="button">Inventory</button>
+    <button data-tab="browsers" type="button">Browsers</button>
     <button data-tab="remove" type="button">Remove a program</button>
     <button data-tab="fleetfile" type="button">Fleet file</button>
     <button data-tab="modules" type="button">Modules</button>
     <button data-tab="rescue" type="button">Recovery</button>
     <div class="group">Your work</div>
+    <button data-tab="flows" type="button">Flows</button>
     <button data-tab="repos" type="button">Repositories</button>
     <button data-tab="folders" type="button">Folders</button>
     <button data-tab="move" type="button">Sync &amp; move</button>
@@ -308,7 +374,7 @@
   </dialog>
 
   <script>
-    const state = { tab: "attention", views: {}, caps: null, location: "", move: { a: "", b: "", result: null, kind: "", running: false }, selfhostDevice: "", setup: { device: "", like: "", result: null, running: "" } };
+    const state = { flowFocus: "", flowOpen: "", tab: "attention", views: {}, caps: null, location: "", move: { a: "", b: "", result: null, kind: "", running: false }, selfhostDevice: "", setup: { device: "", like: "", result: null, running: "" } };
     const $ = (id) => document.getElementById(id);
 
     function authHeaders() {
@@ -401,7 +467,7 @@
         $("view").innerHTML = `<div class="empty">${esc(view?.error || view?.hint || "No data")}</div>`;
         return;
       }
-      ({ attention: renderAttention, repos: renderRepos, folders: renderFolders, devices: renderDevices, move: renderMove, upkeep: renderUpkeep, agents: renderAgents, projects: renderProjects, tools: renderTools, setup: renderSetup, integrations: renderIntegrations, selfhost: renderSelfhost, backups: renderBackups, https: renderHttps, hardware: renderHardware, fleetfile: renderFleetFile, modules: renderModules, net: renderNet, checkouts: renderCheckouts, github: renderGithub, servers: renderServers, tests: renderTests, apps: renderApps, identity: renderIdentity, org: renderOrg, rescue: renderRescue })[state.tab](view.data);
+      ({ attention: renderAttention, repos: renderRepos, folders: renderFolders, devices: renderDevices, move: renderMove, upkeep: renderUpkeep, agents: renderAgents, projects: renderProjects, tools: renderTools, setup: renderSetup, integrations: renderIntegrations, selfhost: renderSelfhost, backups: renderBackups, https: renderHttps, hardware: renderHardware, fleetfile: renderFleetFile, modules: renderModules, net: renderNet, checkouts: renderCheckouts, flows: renderFlows, browsers: renderBrowsers, github: renderGithub, servers: renderServers, tests: renderTests, apps: renderApps, identity: renderIdentity, org: renderOrg, rescue: renderRescue })[state.tab](view.data);
     }
 
     function renderAttention(data) {
@@ -795,6 +861,126 @@
         <div class="panel"><p>Git checkouts the fleet file keeps up to date, on each device and on the Windows side of WSL devices. Updating only fast-forwards: never over local changes or local commits. A browser extension loaded from a checkout picks up the new version when it is reloaded.</p>
         <button data-checkout-update="" type="button" ${canChange && behind ? "" : "disabled"}>Update all that are behind…</button>
         <p><code>lmice checkouts</code> · <code>lmice checkouts update [--device D]</code> · add <code>checkouts = ["~/path", "windows:~/path"]</code> to a device in the fleet file</p></div>`;
+    }
+
+
+    // ---- Flows ---------------------------------------------------------
+    const FLOW_KINDS = [
+      ["sync", "Sync", "--k-sync", "Folders kept level between two devices, both ways."],
+      ["handoff", "Handoff", "--k-sync", "Today's work moved to another device and back."],
+      ["checkouts", "Checkouts", "--k-git", "Git checkouts fast-forwarded from GitHub."],
+      ["github-copy", "GitHub copies", "--k-git", "Every repository you own, copied home."],
+      ["fleet-capture", "Fleet capture", "--k-git", "Every device's settings, committed to the fleet repository."],
+      ["backup", "Backups", "--k-backup", "Encrypted backups pulled to another machine."],
+      ["release", "Releases", "--k-release", "Your tools, built once and installed everywhere."],
+      ["vault", "Vault copies", "--k-vault", "Secrets the vault writes into files on devices (names only here)."],
+    ];
+    function flowAgo(t) {
+      if (!t) return "never";
+      const s = Date.now() / 1000 - t;
+      if (s < 3600) return `${Math.max(1, Math.round(s / 60))} min ago`;
+      if (s < 172800) return `${Math.round(s / 3600)} h ago`;
+      return `${Math.round(s / 86400)} days ago`;
+    }
+    const FLOW_STATE = { ok: "ok", stale: "warn", failed: "critical", never: "warn", unknown: "", manual: "" };
+    function renderFlows(data) {
+      const q = filterText(), focus = state.flowFocus || "";
+      const nodes = data.endpoints || [];
+      const nodeOf = (name) => nodes.find((n) => n.name === name);
+      const touches = (f) => !focus || f.from === focus || f.to === focus;
+      const matches = (f) => !q || [f.title, f.from, f.to, f.what, f.how, f.why, f.kind, ...(f.items || []).map((i) => i.path)].join(" ").toLowerCase().includes(q);
+      const flows = (data.flows || []).filter((f) => touches(f) && matches(f));
+      const stale = (data.flows || []).filter((f) => ["stale", "failed", "never"].includes(f.state));
+      $("cards").innerHTML = `<div class="card"><strong>${(data.flows || []).length} flows</strong><span>between ${nodes.length} devices and services</span></div>` +
+        `<div class="card"><strong>${(data.flows || []).filter((f) => f.scheduled).length} on their own</strong><span>the rest run when you start them</span></div>` +
+        (stale.length ? `<div class="card"><strong>${stale.length} need a look</strong><span>${stale.map((f) => esc(f.title)).join("; ")}</span></div>` : "");
+      const strip = nodes.map((n) => {
+        const cls = n.kind === "device" ? (n.online === true ? "up" : n.online === false ? "down" : "") : "outside";
+        const sub = n.kind === "device" ? (n.online === true ? `online · ${n.os || ""}` : n.online === false ? "offline" : n.os || "") : n.kind === "service" ? `on ${n.host || ""}` : "outside the fleet";
+        return `<button type="button" class="node ${cls} ${focus === n.name ? "focus" : ""}" data-flow-focus="${esc(n.name)}" title="${esc(n.label || n.name)}" aria-pressed="${focus === n.name}"><b>${esc(n.name)}</b><small>${esc(sub)}</small></button>`;
+      }).join("");
+      const lane = (f) => {
+        const kind = FLOW_KINDS.find((k) => k[0] === f.kind) || [f.kind, f.kind, "--k-vault", ""];
+        const alarm = ["stale", "failed", "never"].includes(f.state);
+        const how = (f.how || "").split(/[.:;(]/)[0];
+        const sync = f.kind === "sync";
+        const items = (f.items || []).map((i) => {
+          const off = /not synced|only on/.test(i.detail), skip = /^skipped/.test(i.detail);
+          return `<div class="block ${off || skip ? "off" : ""} ${skip ? "skip" : ""}"><b title="${esc(i.path)}">${esc(sync ? i.path.replace(/^~\/Documents\//, "") : i.path)}</b>${i.detail ? `<span>${esc(i.detail)}</span>` : ""}</div>`;
+        }).join("");
+        const ordered = sync ? "synced first; dim blocks are not copied" : "";
+        return `<details class="lane" style="--k: var(${kind[2]})"${state.flowOpen === f.id ? " open" : ""} data-flow-id="${esc(f.id)}">
+          <summary>
+            <span class="end from" title="${esc(nodeOf(f.from)?.label || f.from)}">${esc(f.from)}</span>
+            <span class="conduit ${f.scheduled ? "" : "manual"} ${f.bidirectional ? "both" : ""} ${alarm ? "alarm" : ""}"><span class="label">${esc(f.title)}</span><span class="wire" aria-hidden="true"></span><span class="when">${esc(f.when)}</span></span>
+            <span class="end to" title="${esc(nodeOf(f.to)?.label || f.to)}">${esc(f.to)}</span>
+            <span class="state">${pill(FLOW_STATE[f.state] ?? "")}${f.state !== "ok" ? ` <span class="muted">${esc(f.state)}</span>` : ""}<small>${f.last_run_unix_seconds ? esc(flowAgo(f.last_run_unix_seconds)) : f.scheduled ? "not run yet" : "by hand"}</small></span>
+          </summary>
+          <div class="drawer">
+            <dl class="facts">
+              <dt>what</dt><dd>${esc(f.what)}</dd>
+              <dt>how</dt><dd>${esc(f.how)}</dd>
+              <dt>why</dt><dd>${esc(f.why)}</dd>
+              <dt>when</dt><dd>${esc(f.when)}${f.last_run_unix_seconds ? ` · last ${esc(new Date(f.last_run_unix_seconds * 1000).toLocaleString())}${f.last_result ? ` (${esc(f.last_result)})` : ""}` : ""}</dd>
+              ${f.detail ? `<dt>now</dt><dd>${esc(f.detail)}</dd>` : ""}
+              <dt>command</dt><dd><code>${esc(f.command)}</code></dd>
+            </dl>
+            ${items ? `<div><p class="muted" style="margin:0 0 6px">${esc(f.items.length)} ${sync ? "folders" : "items"}${ordered ? ` · ${ordered}` : ""}</p><div class="blocks">${items}</div></div>` : ""}
+          </div>
+        </details>`;
+      };
+      const groups = FLOW_KINDS.map(([id, title, color, about]) => {
+        let list = flows.filter((f) => f.kind === id);
+        if (!list.length) return "";
+        if (id === "sync") list = list.map((f) => Object.assign({}, f, { items: [...f.items].sort((a, b) => (/only on|skipped/.test(a.detail) - /only on|skipped/.test(b.detail)) || a.path.localeCompare(b.path)) }));
+        return `<div class="kind-head" style="--k: var(${color})"><h3>${esc(title)}</h3><p>${esc(about)}</p></div><div class="lanes">${list.map(lane).join("")}</div>`;
+      }).join("");
+      $("view").innerHTML = `<div class="fleet-strip" role="group" aria-label="Show the flows of one device">${strip}</div>` +
+        (focus ? `<div class="toolbar"><span class="muted">Only flows that touch ${esc(focus)}.</span><button type="button" data-flow-focus="">Show all</button></div>` : "") +
+        (groups || `<div class="empty">No flow matches.</div>`) +
+        `<div class="panel">${(data.notes || []).map((n) => `<p>${esc(n)}</p>`).join("")}<p><code>lmice flows</code> lists the same; <b>Sync &amp; move</b> runs a sync, <b>Backups</b>, <b>GitHub copies</b>, <b>Checkouts</b> and <b>Tools</b> run the others.</p></div>`;
+    }
+
+    // ---- Browsers ------------------------------------------------------
+    const BROWSER_STATE = { installed: "ok", outdated: "warn", elsewhere: "ok", disabled: "warn", missing: "", unsupported: "" };
+    function renderBrowsers(data) {
+      const q = filterText(), canChange = state.caps?.actions_enabled;
+      const catalog = (data.catalog || []).filter((c) => c.status === "ok");
+      const rows = [];
+      for (const d of data.devices || []) {
+        if (d.status !== "ok") {
+          rows.push(`<tr><td><b>${esc(d.device)}</b></td><td colspan="${catalog.length + 2}" class="detail">${d.status === "offline" ? `<span class="pill">offline</span>` : pill("warn")} ${esc(d.detail)}</td></tr>`);
+          continue;
+        }
+        if (!d.browsers.length) rows.push(`<tr><td><b>${esc(d.device)}</b></td><td colspan="${catalog.length + 2}" class="muted">no browser profiles found</td></tr>`);
+        for (const b of d.browsers) for (const p of b.profiles) {
+          const text = [d.device, b.name, p.name, p.id, ...p.extensions.map((e) => e.name)].join(" ").toLowerCase();
+          if (q && !text.includes(q)) continue;
+          const cells = catalog.map((c) => {
+            const s = (p.catalog || []).find((x) => x.extension === c.name) || { state: "missing" };
+            const add = s.state === "missing" || s.state === "outdated"
+              ? `<button type="button" data-browser-add="${esc(c.name)}" data-device="${esc(d.device)}" data-browser="${esc(b.id)}" data-profile="${esc(p.id)}" data-profile-name="${esc(p.name)}" ${canChange ? "" : "disabled"}>${s.state === "outdated" ? "Update…" : "Add…"}</button>`
+              : "";
+            return `<td class="cell" title="${esc(s.detail || "")}">${s.state === "missing" ? `<span class="muted">not in it</span> ` : `${pill(BROWSER_STATE[s.state] ?? "")} <span class="muted">${esc(s.state)}${s.version ? ` ${esc(s.version)}` : ""}</span> `}${add}</td>`;
+          }).join("");
+          const others = p.extensions.filter((e) => !catalog.some((c) => c.title === e.name));
+          rows.push(`<tr><td>${esc(d.device)}</td><td class="pname"><b>${esc(p.name)}</b><br><span class="muted">${esc(b.name)} · ${esc(p.id)}${b.engine === "chromium" && !p.developer_mode ? " · developer mode off" : ""}</span></td>${cells}<td class="detail">${others.length ? others.map((e) => `${esc(e.name)}${e.enabled ? "" : " (off)"}`).join(", ") : "none"}</td></tr>`);
+        }
+      }
+      const staged = (data.devices || []).flatMap((d) => (d.staged || []).map((s) => `${esc(d.device)}: ${esc(s.extension)} ${esc(s.version)}`));
+      $("cards").innerHTML = catalog.map((c) => `<div class="card"><strong>${esc(c.title)}</strong><span>${esc(c.name)} ${esc(c.version)} · from ${esc(c.source)}${c.gecko_id ? " · Firefox too" : ""}</span></div>`).join("") +
+        (data.catalog || []).filter((c) => c.status !== "ok").map((c) => `<div class="card"><strong>${esc(c.name)}</strong><span>${esc(c.status)}</span></div>`).join("");
+      $("view").innerHTML = `<div id="browserResult"></div><div class="scroll"><table class="browser-grid"><thead><tr><th>Device</th><th>Profile</th>${catalog.map((c) => `<th>${esc(c.title)}</th>`).join("")}<th>Other extensions</th></tr></thead><tbody>${rows.join("")}</tbody></table></div>
+        <div class="panel"><p><b>Adding</b> copies the extension to a fixed folder on that device and opens the profile's extensions page on its screen. Brave, Chrome and Edge only take an extension from outside their store from you: press <b>Load unpacked</b> and pick the folder shown, once per profile. After that LinuxMice keeps the folder current and the browser loads it from there. Firefox needs a copy signed by Mozilla.</p>
+        <p>${staged.length ? `Staged copies: ${staged.join(" · ")}. ` : ""}${jobButton("Refresh changed copies…", "browsers-update", "lmice browsers update --fleet", "Copies newer versions of your extensions into the staged folders; browsers load them from there.")}</p>
+        <p><b>LinuxMice Passwords</b>: after adding it, open it from the toolbar and connect to this GUI. It shows a code: allow it on the <b>Sign-in</b> page or with <code>lmice signin CODE</code>. To move from another password manager: <code>lmice vault import EXPORT.csv --from proton</code>.</p>
+        <p><code>lmice browsers --fleet</code> · <code>lmice browsers add EXT --device D --profile NAME</code> · <code>lmice browsers update</code> · your extensions: <code>~/.config/linuxmice/browsers.toml</code></p></div>`;
+    }
+    function showBrowserAdd(job) {
+      const r = job.view?.data;
+      if (!r) { $("browserResult").innerHTML = `<div class="panel"><p>${pill("failed")} ${esc(job.view?.error || "no answer")}</p></div>`; return; }
+      $("browserResult").innerHTML = `<div class="panel"><h3>${esc(r.extension)} on ${esc(r.device)}</h3><p>${esc(r.stage?.detail || "")}${r.stage?.path ? ` · folder <code>${esc(r.stage.path)}</code>` : ""}</p>` +
+        r.profiles.map((s) => `<p>${pill(s.result === "opened" || s.result === "installed" || s.result === "already" ? "ok" : s.result === "failed" ? "failed" : "warn")} <b>${esc(s.profile_name)}</b> (${esc(s.browser)}): ${esc(s.detail)}</p>${s.next?.length ? `<ol class="next-steps">${s.next.map((n) => `<li>${esc(n)}</li>`).join("")}</ol>` : ""}`).join("") + `</div>`;
     }
 
     function jobButton(label, job, command, note, fields = {}, cls = "") {
@@ -1660,6 +1846,8 @@
       agents: ["Agents", "Claude sessions on this machine: Remote Control, their browser and their sandboxed desktops."],
       org: ["Organization", "Your organization's devices against its policies, who can sign in, and every change made through LinuxMice."],
       vault: ["Vault", "Passwords and tokens for you and your agents, in vaults with their own keys."],
+      flows: ["Flows", "Everything that moves data between your devices and services: what, from where to where, how, why, and when it last ran. Nothing else copies anything on its own."],
+      browsers: ["Browsers", "The browsers on each device, their profiles and extensions, and your own extensions in each profile. Add one to a profile from here."],
     };
     function setTab(tab, push = true) {
       if (!PAGES[tab]) tab = "attention";
@@ -1700,6 +1888,7 @@
       if (button) setTab(button.dataset.tab);
     });
     window.addEventListener("popstate", () => setTab(location.hash.slice(1), false));
+    $("view").addEventListener("toggle", (event) => { const id = event.target.dataset?.flowId; if (id) state.flowOpen = event.target.open ? id : (state.flowOpen === id ? "" : state.flowOpen); }, true);
     $("view").addEventListener("click", (event) => {
       const row = event.target.closest("tr[data-location]");
       if (row && row.dataset.location) { openDiff(row.dataset.location); return; }
@@ -1810,6 +1999,19 @@
         identityAction("authenticator-confirm", email, $("identityCode").value.trim())
           .then((r) => { $("identityMessage").textContent = r.detail || "on"; state.views.identity = null; setTimeout(() => load(true), 1500); })
           .catch((error) => { $("identityMessage").textContent = `not on: ${error.message}`; });
+        return;
+      }
+      const flowFocus = event.target.closest("[data-flow-focus]");
+      if (flowFocus) { state.flowFocus = state.flowFocus === flowFocus.dataset.flowFocus ? "" : flowFocus.dataset.flowFocus; render(); return; }
+      const browserAdd = event.target.closest("button[data-browser-add]");
+      if (browserAdd) {
+        const d = browserAdd.dataset;
+        askConfirm(`lmice browsers add ${d.browserAdd} --device ${d.device} --browser ${d.browser} --profile "${d.profile}"`, `Copies ${d.browserAdd} to a fixed folder on ${d.device} and opens the extensions page of "${d.profileName}" on its screen; you pick the folder there once.`, async () => {
+          $("browserResult").innerHTML = `<div class="panel"><p class="muted">working on ${esc(d.device)}…</p></div>`;
+          try { showBrowserAdd(await startJob({ kind: "browsers-add", id: d.browserAdd, device: d.device, a: d.browser, b: d.profile })); }
+          catch (error) { $("browserResult").innerHTML = `<div class="panel"><p>${pill("failed")} ${esc(error.message)}</p></div>`; }
+          state.views.browsers = null;
+        });
         return;
       }
       const jobButton = event.target.closest("button[data-job]");

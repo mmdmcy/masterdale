@@ -95,7 +95,8 @@ func (s *Server) authMiddleware(next http.Handler) http.Handler {
 			writeError(w, http.StatusForbidden, errors.New("remote access is restricted to loopback and private-network addresses by default; set DALE_REMOTE_SCOPE=public only if a firewall or reverse proxy protects this service"))
 			return
 		}
-		if r.URL.Path == "/healthz" || isDashboardShellRequest(r) || isOIDCRoute(r) || isSigninRoute(r) || isTrustedLoopbackRequest(r) || isVaultAnswerRoute(r) {
+		if r.URL.Path == "/healthz" || isDashboardShellRequest(r) || isOIDCRoute(r) || isSigninRoute(r) || isTrustedLoopbackRequest(r) || isVaultAnswerRoute(r) || isPasswordsRoute(r) {
+			// The passwords routes check their own bearer token.
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -287,6 +288,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("/v1/linuxmice/", s.handleLinuxMice)
 	s.mux.HandleFunc("/v1/vault", s.handleVault)
 	s.mux.HandleFunc("/v1/vault/", s.handleVault)
+	s.mux.HandleFunc("/v1/passwords/", s.handlePasswords)
 	s.mux.HandleFunc("/mcp", s.handleMCP)
 }
 

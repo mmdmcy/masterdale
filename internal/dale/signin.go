@@ -62,6 +62,9 @@ type signinWait struct {
 	Created    time.Time
 	ExpiresAt  time.Time
 	Approved   bool
+	// Extension: LinuxMice Passwords waits for this approval, not a
+	// browser page; it collects a bearer token instead of a cookie.
+	Extension bool
 }
 
 type sessionStore struct {
@@ -127,6 +130,12 @@ func (st *sessionStore) prune(now time.Time) {
 }
 
 func (st *sessionStore) issue(subject, how, browser string) (string, error) {
+	return st.issueNamed(subject, how, shortBrowser(browser))
+}
+
+// issueNamed is issue with the browser already named ("LinuxMice
+// Passwords in Brave on Linux").
+func (st *sessionStore) issueNamed(subject, how, name string) (string, error) {
 	token, err := randomURLToken(32)
 	if err != nil {
 		return "", err
@@ -146,7 +155,7 @@ func (st *sessionStore) issue(subject, how, browser string) (string, error) {
 		delete(st.sessions, oldest)
 	}
 	st.sessions[hashHex(token)] = storedSession{
-		Subject: subject, How: how, Browser: shortBrowser(browser),
+		Subject: subject, How: how, Browser: name,
 		Created: now.UTC(), ExpiresAt: now.Add(sessionTTL).UTC(),
 	}
 	st.save()
@@ -154,24 +163,55 @@ func (st *sessionStore) issue(subject, how, browser string) (string, error) {
 }
 
 // subject is the signed-in subject of the request's session, or "".
+// An extension's token is not a browser session: as a cookie it signs
+// nothing in.
 func (st *sessionStore) subject(r *http.Request) string {
 	cookie, err := r.Cookie(sessionCookie)
 	if err != nil || cookie.Value == "" {
 		return ""
 	}
+	session, ok := st.lookup(cookie.Value)
+	if !ok || session.How == extensionHow {
+		return ""
+	}
+	return session.Subject
+}
+
+// extensionSubject is the subject of a LinuxMice Passwords bearer token,
+// or "" (a browser's cookie value is not accepted here).
+func (st *sessionStore) extensionSubject(token string) string {
+	if token == "" {
+		return ""
+	}
+	session, ok := st.lookup(token)
+	if !ok || session.How != extensionHow {
+		return ""
+	}
+	return session.Subject
+}
+
+// endToken signs out the session a token belongs to.
+func (st *sessionStore) endToken(token string) {
 	st.mu.Lock()
 	defer st.mu.Unlock()
-	key := hashHex(cookie.Value)
+	delete(st.sessions, hashHex(token))
+	st.save()
+}
+
+func (st *sessionStore) lookup(token string) (storedSession, bool) {
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	key := hashHex(token)
 	session, ok := st.sessions[key]
 	if !ok {
-		return ""
+		return storedSession{}, false
 	}
 	if !session.ExpiresAt.After(time.Now()) {
 		delete(st.sessions, key)
 		st.save()
-		return ""
+		return storedSession{}, false
 	}
-	return session.Subject
+	return session, true
 }
 
 func (st *sessionStore) end(r *http.Request) {
@@ -239,6 +279,16 @@ func normalCode(code string) string {
 }
 
 func (st *sessionStore) newWait(browser, address string) (*signinWait, string, error) {
+	return st.startWait(shortBrowser(browser), address, false)
+}
+
+// newExtensionWait is a wait for LinuxMice Passwords: the same code, allowed
+// the same way (lmice signin CODE, Allow on the Sign-in page).
+func (st *sessionStore) newExtensionWait(browser, address string) (*signinWait, string, error) {
+	return st.startWait("LinuxMice Passwords in "+browser, address, true)
+}
+
+func (st *sessionStore) startWait(name, address string, extension bool) (*signinWait, string, error) {
 	id, err := randomURLToken(24)
 	if err != nil {
 		return nil, "", err
@@ -260,8 +310,8 @@ func (st *sessionStore) newWait(browser, address string) (*signinWait, string, e
 	}
 	wait := &signinWait{
 		ID: id, Code: code, secretHash: sha256.Sum256([]byte(secret)),
-		Browser: shortBrowser(browser), Address: address,
-		Created: now, ExpiresAt: now.Add(signinWaitTTL),
+		Browser: name, Address: address,
+		Created: now, ExpiresAt: now.Add(signinWaitTTL), Extension: extension,
 	}
 	st.waits[id] = wait
 	copied := *wait
@@ -288,22 +338,30 @@ func (st *sessionStore) approve(code string) (signinWait, bool) {
 
 // collect returns "pending", "approved" (and removes the wait) or "gone".
 func (st *sessionStore) collect(id, secret string) string {
+	status, _ := st.collectKind(id, secret, false)
+	return status
+}
+
+// collectKind is collect for a browser page (extension false) or for
+// LinuxMice Passwords (true); a wait only answers its own kind. It also
+// returns the waiting browser's name.
+func (st *sessionStore) collectKind(id, secret string, extension bool) (string, string) {
 	st.mu.Lock()
 	defer st.mu.Unlock()
 	wait, ok := st.waits[id]
 	if !ok || !wait.ExpiresAt.After(time.Now()) {
 		delete(st.waits, id)
-		return "gone"
+		return "gone", ""
 	}
 	got := sha256.Sum256([]byte(secret))
-	if subtle.ConstantTimeCompare(got[:], wait.secretHash[:]) != 1 {
-		return "gone"
+	if subtle.ConstantTimeCompare(got[:], wait.secretHash[:]) != 1 || wait.Extension != extension {
+		return "gone", ""
 	}
 	if !wait.Approved {
-		return "pending"
+		return "pending", ""
 	}
 	delete(st.waits, id)
-	return "approved"
+	return "approved", wait.Browser
 }
 
 type waitingBrowser struct {
