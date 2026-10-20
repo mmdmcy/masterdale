@@ -197,6 +197,8 @@ func TestLinuxMiceAgentJobsMapToWords(t *testing.T) {
 		"agents-browser-off": "agents browser off --device server --yes --format json",
 		"agents-desktop-on":  "agents desktop on --device server --yes --format json",
 		"agents-desktop-off": "agents desktop off --device server --yes --format json",
+		"agents-park":        "agents park --device server --yes --format json",
+		"agents-park-back":   "agents park back --device server --yes --format json",
 		"projects-tidy":      "projects tidy --yes --format json",
 	} {
 		args, changes, err := linuxmiceJobArgs(LinuxMiceJobRequest{Kind: kind, Device: "server"})

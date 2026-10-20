@@ -453,7 +453,7 @@ func linuxmiceJobArgs(req LinuxMiceJobRequest) ([]string, bool, error) {
 		return []string{"upkeep", "--yes", "--format", "json"}, true, nil
 	case "projects-tidy":
 		return []string{"projects", "tidy", "--yes", "--format", "json"}, true, nil
-	case "agents-start", "agents-stop", "agents-browser-on", "agents-browser-off", "agents-desktop-on", "agents-desktop-off":
+	case "agents-start", "agents-stop", "agents-browser-on", "agents-browser-off", "agents-desktop-on", "agents-desktop-off", "agents-park", "agents-park-back":
 		if !linuxmiceDevicePattern.MatchString(req.Device) {
 			return nil, false, errors.New("pick a device")
 		}
@@ -464,6 +464,8 @@ func linuxmiceJobArgs(req LinuxMiceJobRequest) ([]string, bool, error) {
 			"agents-browser-off": {"browser", "off"},
 			"agents-desktop-on":  {"desktop", "on"},
 			"agents-desktop-off": {"desktop", "off"},
+			"agents-park":        {"park"},
+			"agents-park-back":   {"park", "back"},
 		}[req.Kind]
 		args := append([]string{"agents"}, action...)
 		return append(args, "--device", req.Device, "--yes", "--format", "json"), true, nil

@@ -715,7 +715,10 @@
         ? `${pill("active")} in ${esc(d.server_dir || "?")}${d.sessions ? `, ${esc(d.sessions)} sessions in use` : ""}`
         : d.server === "absent" ? `${pill("off")} not set up` : pill(d.server);
       const browser = d.browser ? `${pill("on")} each session gets its own private headless browser${d.browser_installed ? "" : " (browser not downloaded yet)"}` : pill("off");
-      const desktopOn = d.desktop === "on";
+      const parked = d.parked || [];
+      const parkedText = parked.length
+        ? parked.map((w) => `${pill("on")} workspace ${esc(String(w.workspace))}: ${esc(w.title)} <span class="muted">(${esc(w.window)})</span>`).join("<br>")
+        : `${pill("off")} none`;
       const sessions = d.desktop_sessions || [];
       const desktop = (desktopOn ? `${pill("on")} each Claude session gets its own desktop on first use (at most 3 at once); removed when the session ends` : `${pill("off")} ${d.desktop === "absent" ? "not set up" : "turned off"}`) +
         sessions.filter((x) => !x.profile).map((x) => `<br>${pill(x.isolated ? "ok" : "failed")} ${esc(x.name)} · throwaway · ${x.isolated ? "isolated" : "isolation check failed"} · <a href="${esc(x.url)}" target="_blank" rel="noopener">watch or take over</a>`).join("");
@@ -735,6 +738,7 @@
         `<tr><th>Claude Code</th><td>${claude}</td><td></td></tr>` +
         `<tr><th>Remote Control</th><td>${server}</td><td>${running ? button("agents-stop", "Stop…", "danger") : button("agents-start", "Start…")}</td></tr>` +
         `<tr><th>Agent browser</th><td>${browser}</td><td>${d.browser ? button("agents-browser-off", "Turn off…", "danger") : button("agents-browser-on", "Turn on…")}</td></tr>` +
+        `<tr><th>Parked windows</th><td>${parkedText}<br><span class="muted">The Brave window that holds the Claude in Chrome tab group, moved to another workspace so the extension's tab-switching leaves your desktop alone. Park parks only a window that just appeared (newest, New Tab, in front); otherwise <code>lmice agents park --title "the tab's title"</code>. Once per tab group: move the Claude group to a window of its own (right-click its name, Move group to new window).</span></td><td>${button("agents-park", "Park…")} ${parked.length ? button("agents-park-back", "Bring back…", "danger") : ""}</td></tr>` +
         `<tr><th>Agent desktop</th><td>${desktop}<br><span class="muted">Sandboxed Debian + XFCE + Firefox desktops for computer use; they reach the internet, not your network, and not each other. Viewer password: ~/.config/linuxmice/agent-desktop/vnc-password on ${esc(d.device)}.</span></td><td>${desktopOn ? button("agents-desktop-off", "Turn off…", "danger") : button("agents-desktop-on", "Turn on…")}</td></tr>` +
         profileRows +
         `<tr><th>T3 Code</th><td>${t3}${d.t3code && d.device === state.caps?.device ? `<br><span class="muted">First time in a browser: pair it, then it stays paired. The link is made fresh and works for 5 minutes.</span>` : ""}</td><td>${d.t3code && d.t3code_url && d.device === state.caps?.device ? `<button data-t3code-pair type="button" ${dis}>Pair this browser</button>` : ""}</td></tr>` +
@@ -2153,7 +2157,7 @@
       const agents = event.target.closest("button[data-agents]");
       if (agents) {
         const { agents: kind, device } = agents.dataset;
-        const words = { "agents-start": "start", "agents-stop": "stop", "agents-browser-on": "browser on", "agents-browser-off": "browser off", "agents-desktop-on": "desktop on", "agents-desktop-off": "desktop off" }[kind];
+        const words = { "agents-start": "start", "agents-stop": "stop", "agents-browser-on": "browser on", "agents-browser-off": "browser off", "agents-desktop-on": "desktop on", "agents-desktop-off": "desktop off", "agents-park": "park", "agents-park-back": "park back" }[kind];
         const notes = {
           "agents-start": "Keeps Claude Code Remote Control running as a user service; sessions you open from the Claude app or claude.ai/code run there.",
           "agents-stop": "Stops the Remote Control service; open sessions end.",
@@ -2161,6 +2165,8 @@
           "agents-browser-off": "New Claude sessions start without the agent browser.",
           "agents-desktop-on": "Gives every Claude session on this device its own sandboxed desktop on first use (the first time builds a 1.4 GB image). A test desktop must prove it can't reach your network first. Each desktop: at most 2 GB of memory and 2 CPUs; at most 3 at once.",
           "agents-desktop-off": "Removes the desktop tools from Claude Code and closes desktops in use.",
+          "agents-park": "Moves the browser window that just appeared for the agent (newest, New Tab, in front) to another workspace; any other window is refused and listed, name it in a terminal with --title.",
+          "agents-park-back": "Brings the parked browser windows to the workspace in use.",
         };
         askConfirm(`lmice agents ${words} --device ${device} --yes --format json`, notes[kind], async () => {
           $("meta").textContent = `agents ${words} on ${device}…`;
