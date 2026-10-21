@@ -1146,7 +1146,7 @@
       $("cards").innerHTML = "";
       $("meta").innerHTML = "<code>$ lmice files --device D FOLDER</code> · <code>lmice files copy DEVICE:PATH DEVICE:FOLDER</code>";
       ["verdict", "hostDevice"].forEach((id) => { $(id).style.display = "none"; });
-      $("view").innerHTML = `<div class="files-grid">${filesPane("from")}<div class="files-go"><div class="files-conduit" id="filesConduit"></div><button class="primary" id="filesBring" type="button">Bring →</button><div class="what" id="filesWhat"></div><div class="files-conduit" id="filesConduit2"></div><label class="muted"><input type="checkbox" id="filesHidden" ${f.hidden ? "checked" : ""}> show hidden</label></div>${filesPane("to")}</div><div class="panel files-log" id="filesLog"${f.log.length ? "" : " hidden"}></div>`;
+      $("view").innerHTML = `<div class="files-grid">${filesPane("from")}<div class="files-go"><div class="files-conduit" id="filesConduit"></div><button class="primary" id="filesBring" type="button">Bring →</button><div class="what" id="filesWhat"></div><div class="files-conduit" id="filesConduit2"></div><label class="muted"><input type="checkbox" id="filesHidden" ${f.hidden ? "checked" : ""}> show hidden</label></div>${filesPane("to")}</div><div class="panel files-log" id="filesLog"></div>`;
       for (const side of ["from", "to"]) {
         $(`files-${side}-device`).addEventListener("change", (e) => { f[side].device = e.target.value; f[side].path = side === "to" ? "~/Downloads" : "~"; if (side === "from") f.picked.clear(); filesLoad(side); });
         $(`files-${side}-path`).addEventListener("keydown", (e) => { if (e.key === "Enter") { f[side].path = e.target.value.trim() || "~"; if (side === "from") f.picked.clear(); filesLoad(side); } });
@@ -1221,15 +1221,22 @@
       const button = $("filesBring");
       if (!button) return;
       const n = f.picked.size;
-      const to = f.to.data ? `${f.to.device}:${f.to.data.path}` : "";
+      const to = filesTarget();
       button.disabled = f.busy || !n || !to || !state.caps?.actions_enabled;
       button.textContent = f.busy ? "Bringing…" : n > 1 ? `Bring ${n} →` : "Bring →";
-      $("filesWhat").innerHTML = !state.caps?.actions_enabled ? "Changes are switched off on this node." : !n ? "Tick files or folders on the left." : !to ? "Open the folder they go into on the right." : `${n === 1 ? esc([...f.picked][0].split("/").pop()) : `${n} items`} from <b>${esc(f.from.device)}</b> into <code>${esc(to)}</code>`;
+      $("filesWhat").innerHTML = !state.caps?.actions_enabled ? "Changes are switched off on this node." : !n ? "Tick files or folders on the left." : !to ? "Open the folder they go into on the right." : `${n === 1 ? esc([...f.picked][0].split("/").pop()) : `${n} items`} from <b>${esc(f.from.device)}</b> into <code>${esc(to)}</code>${f.to.data ? "" : " (made when it is brought)"}`;
+    }
+    // Where Bring copies to: the open folder, or a typed one that is not
+    // there yet (lmice makes it).
+    function filesTarget() {
+      const f = filesState();
+      if (f.to.data) return `${f.to.device}:${f.to.data.path}`;
+      return /no such folder/.test(f.to.error) ? `${f.to.device}:${f.to.path}` : "";
     }
     function filesBring() {
       const f = filesState();
       const items = [...f.picked];
-      const to = `${f.to.device}:${f.to.data.path}`;
+      const to = filesTarget();
       const commands = items.map((p) => `lmice files copy "${f.from.device}:${p}" "${to}"`);
       askConfirm(commands.join("\n$ "), `Copies ${items.length === 1 ? "it" : `these ${items.length}`} over the fleet's SSH${f.from.device !== state.caps?.device && f.to.device !== state.caps?.device ? `, through ${state.caps?.device}` : ""}. Nothing on ${f.to.device} is overwritten.`, async () => {
         f.busy = true; filesSummary();
@@ -1257,7 +1264,7 @@
       const f = filesState();
       const log = $("filesLog");
       if (!log) return;
-      log.hidden = !f.log.length;
+      log.style.display = f.log.length ? "" : "none";
       log.innerHTML = `<h3>Brought</h3>${f.log.map((l) => `<p>${l}</p>`).join("")}`;
     }
 
