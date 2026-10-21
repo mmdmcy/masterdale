@@ -99,6 +99,8 @@ var (
 	linuxmiceProfilePattern  = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9 ._-]{0,63}$`)
 	linuxmiceServicePattern  = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9@._:-]{0,127}$`)
 	linuxmiceUpstreamPattern = regexp.MustCompile(`^http://[0-9]{1,3}(\.[0-9]{1,3}){3}:[0-9]{1,5}$`)
+	// A folder or file for lmice files: ~, ~/..., /... or C:/... (Windows).
+	linuxmiceFilesPathPattern = regexp.MustCompile(`^(~|~/[^\x00-\x1f]{0,1000}|/[^\x00-\x1f]{0,1000}|[A-Za-z]:/[^\x00-\x1f]{0,1000})$`)
 )
 
 type LinuxMiceView struct {
@@ -322,6 +324,13 @@ func (s *Server) handleLinuxMice(w http.ResponseWriter, r *http.Request) {
 			args = append(args, "--with-data")
 		}
 		args = append(args, "--format", "json")
+	case "files":
+		device, path := query.Get("device"), query.Get("path")
+		if !linuxmiceDevicePattern.MatchString(device) || !linuxmiceFilesPath(path) {
+			writeError(w, http.StatusBadRequest, errors.New("files needs device=DEVICE and path=~, ~/PATH or an absolute path"))
+			return
+		}
+		args = []string{"files", "--device", device, path, "--format", "json"}
 	case "compare":
 		a, b := query.Get("a"), query.Get("b")
 		if !linuxmiceDevicePattern.MatchString(a) || !linuxmiceDevicePattern.MatchString(b) {
@@ -593,6 +602,16 @@ func linuxmiceJobArgs(req LinuxMiceJobRequest) ([]string, bool, error) {
 			args = append(args, "--device", req.Device)
 		}
 		return args, true, nil
+	case "files-copy":
+		// A is DEVICE:PATH to bring, B is DEVICE:FOLDER it goes into; lmice
+		// never overwrites (a taken name gets " (2)").
+		for _, side := range []string{req.A, req.B} {
+			device, path, ok := strings.Cut(side, ":")
+			if !ok || !linuxmiceDevicePattern.MatchString(device) || !linuxmiceFilesPath(path) {
+				return nil, false, errors.New("files-copy needs a=DEVICE:PATH and b=DEVICE:FOLDER")
+			}
+		}
+		return []string{"--yes", "--format", "json", "files", "copy", req.A, req.B}, true, nil
 	case "fleet-send", "fleet-fetch":
 		// A is the path on this machine, B the path on Device; neither
 		// command overwrites anything.
@@ -706,6 +725,11 @@ func linuxmiceJobArgs(req LinuxMiceJobRequest) ([]string, bool, error) {
 }
 
 // linuxmiceLocal returns this node's LinuxMice device name, cached like a view.
+// linuxmiceFilesPath: a path lmice files takes, without .. anywhere.
+func linuxmiceFilesPath(path string) bool {
+	return linuxmiceFilesPathPattern.MatchString(path) && !strings.Contains("/"+path+"/", "/../")
+}
+
 func (s *Server) linuxmiceLocal(ctx context.Context) string {
 	args := linuxmiceViews["integrations-local"]
 	key := strings.Join(args, "\x00")

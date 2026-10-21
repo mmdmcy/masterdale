@@ -258,6 +258,34 @@
     .browser-grid td.cell .pill { margin-right: 4px; }
     .browser-grid .pname b { font-family: var(--readout); }
     .next-steps { margin: 6px 0 0; padding-left: 20px; line-height: 1.5; }
+    /* Files: two devices side by side, what to bring and where it goes. */
+    .files-grid { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: 12px; align-items: start; }
+    .files-pane { border: 1px solid var(--line); background: var(--surface); clip-path: polygon(0 0, calc(100% - var(--cut)) 0, 100% var(--cut), 100% 100%, var(--cut) 100%, 0 calc(100% - var(--cut))); }
+    .files-pane > header { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 8px; border-bottom: 1px solid var(--line); background: var(--surface-2); }
+    .files-pane > header .role { font-family: var(--readout); font-size: 11px; color: var(--accent); letter-spacing: .06em; margin-right: 4px; }
+    .files-pane > header select { flex: 0 0 auto; }
+    .files-path { flex: 1 1 160px; min-width: 0; font-family: var(--readout); font-size: 12.5px; padding: 6px 8px; border: 1px solid var(--line); background: var(--bg); color: var(--ok); }
+    .files-list { max-height: 62vh; overflow: auto; }
+    .files-list table { width: 100%; border-collapse: collapse; }
+    .files-list td { padding: 5px 8px; border-bottom: 1px solid #1f1609; white-space: nowrap; }
+    .files-list td.n { width: 100%; max-width: 0; overflow: hidden; text-overflow: ellipsis; }
+    .files-list td.s, .files-list td.d { color: var(--muted); font-family: var(--readout); font-size: 12px; text-align: right; }
+    .files-list tr.folder td.n { color: var(--text); cursor: pointer; }
+    .files-list tr.folder td.n::before { content: "▸ "; color: var(--accent); }
+    .files-list tr.file td.n::before { content: "· "; color: var(--muted); }
+    .files-list tr:hover td { background: #140e06; }
+    .files-list tr.picked td { background: #2a1a05; }
+    .files-list tr.dim td { opacity: .45; }
+    .files-list .hint { padding: 14px 10px; color: var(--muted); }
+    .files-go { display: flex; flex-direction: column; gap: 8px; align-items: stretch; padding-top: 48px; min-width: 150px; }
+    .files-go button.primary { padding: 12px 14px; font-weight: 700; background: #1d1004; }
+    .files-go .what { font-size: 12px; color: var(--muted); line-height: 1.4; }
+    .files-conduit { height: 8px; background: var(--hazard); opacity: .25; }
+    .files-conduit.live { opacity: 1; animation: files-flow .6s linear infinite; background-size: 22.6px 22.6px; }
+    @keyframes files-flow { to { background-position: 22.6px 0; } }
+    @media (prefers-reduced-motion: reduce) { .files-conduit.live { animation: none; } }
+    .files-log p { margin: 4px 0; }
+    @media (max-width: 900px) { .files-grid { grid-template-columns: 1fr; } .files-go { padding-top: 0; } }
   </style>
   <script>
     // Display mode: auto (night 21:00-07:00), night (dim, no glow or
@@ -314,6 +342,7 @@
     <button data-tab="modules" type="button">Modules</button>
     <button data-tab="rescue" type="button">Recovery</button>
     <div class="group">Your work</div>
+    <button data-tab="files" type="button">Files</button>
     <button data-tab="flows" type="button">Flows</button>
     <button data-tab="repos" type="button">Repositories</button>
     <button data-tab="folders" type="button">Folders</button>
@@ -428,6 +457,7 @@
       if (state.tab === "vault") { loadVault(); return; }
       if (state.tab === "compare") { renderCompareForm(); return; }
       if (state.tab === "remove") { renderRemoveForm(); return; }
+      if (state.tab === "files") { renderFiles(force); return; }
       if (["services", "ports", "display", "windows", "schedules", "inventory"].includes(state.tab)) { loadDeviceView(state.tab, force); return; }
       const name = viewName();
       let path = `/v1/linuxmice/${name}`;
@@ -1097,6 +1127,138 @@
         <div class="toolbar">${devices.map((d) => `<label><input type="checkbox" class="rmDevice" value="${esc(d)}" ${(state.rmDevices || []).includes(d) ? "checked" : ""}> ${esc(d)}</label>`).join(" ")}</div></div><div id="rmResult"></div>`;
       $("rmPlan").addEventListener("click", planRemove);
       if (state.rmPlan) showRemove(state.rmPlan);
+    }
+
+    // ---- Files (lmice files, ADR 0090) ----------------------------------
+    state.files = state.files || null;
+    function filesState() {
+      if (state.files) return state.files;
+      const here = state.caps?.device || "";
+      const other = fleetDevices().find((d) => d !== here) || here;
+      state.files = { from: { device: other, path: "~", data: null, error: "" }, to: { device: here, path: "~/Downloads", data: null, error: "" }, picked: new Set(), hidden: false, busy: false, log: [] };
+      return state.files;
+    }
+    async function renderFiles(force) {
+      if (!fleetDevices().length) {
+        try { state.views.devices = await api("/v1/linuxmice/devices"); } catch (_) { /* the panes say so */ }
+      }
+      const f = filesState();
+      $("cards").innerHTML = "";
+      $("meta").innerHTML = "<code>$ lmice files --device D FOLDER</code> · <code>lmice files copy DEVICE:PATH DEVICE:FOLDER</code>";
+      ["verdict", "hostDevice"].forEach((id) => { $(id).style.display = "none"; });
+      $("view").innerHTML = `<div class="files-grid">${filesPane("from")}<div class="files-go"><div class="files-conduit" id="filesConduit"></div><button class="primary" id="filesBring" type="button">Bring →</button><div class="what" id="filesWhat"></div><div class="files-conduit" id="filesConduit2"></div><label class="muted"><input type="checkbox" id="filesHidden" ${f.hidden ? "checked" : ""}> show hidden</label></div>${filesPane("to")}</div><div class="panel files-log" id="filesLog"${f.log.length ? "" : " hidden"}></div>`;
+      for (const side of ["from", "to"]) {
+        $(`files-${side}-device`).addEventListener("change", (e) => { f[side].device = e.target.value; f[side].path = side === "to" ? "~/Downloads" : "~"; if (side === "from") f.picked.clear(); filesLoad(side); });
+        $(`files-${side}-path`).addEventListener("keydown", (e) => { if (e.key === "Enter") { f[side].path = e.target.value.trim() || "~"; if (side === "from") f.picked.clear(); filesLoad(side); } });
+        $(`files-${side}-up`).addEventListener("click", () => { const p = f[side].data?.parent; if (p) { f[side].path = p; if (side === "from") f.picked.clear(); filesLoad(side); } });
+        $(`files-${side}-home`).addEventListener("click", () => { f[side].path = "~"; if (side === "from") f.picked.clear(); filesLoad(side); });
+        $(`files-${side}-list`).addEventListener("click", (e) => filesClick(side, e));
+      }
+      $("filesHidden").addEventListener("change", (e) => { f.hidden = e.target.checked; filesShow("from"); filesShow("to"); });
+      $("filesBring").addEventListener("click", filesBring);
+      filesShowLog();
+      for (const side of ["from", "to"]) { if (force || !f[side].data) filesLoad(side); else filesShow(side); }
+    }
+    function filesPane(side) {
+      const f = filesState();
+      const devices = fleetDevices();
+      if (f[side].device && !devices.includes(f[side].device)) devices.push(f[side].device);
+      return `<section class="files-pane"><header><span class="role">${side === "from" ? "FROM" : "INTO"}</span><select id="files-${side}-device" aria-label="${side === "from" ? "Device to bring from" : "Device to bring to"}">${devices.map((d) => `<option ${d === f[side].device ? "selected" : ""}>${esc(d)}</option>`).join("")}</select><button id="files-${side}-up" type="button" title="Up one folder" aria-label="Up one folder">↑</button><button id="files-${side}-home" type="button" title="Home folder" aria-label="Home folder">~</button><input class="files-path" id="files-${side}-path" value="${esc(f[side].path)}" spellcheck="false" autocomplete="off" aria-label="Folder"></header><div class="files-list" id="files-${side}-list"><div class="hint">loading…</div></div></section>`;
+    }
+    async function filesLoad(side) {
+      const f = filesState();
+      const want = `${f[side].device}\u0000${f[side].path}`;
+      f[side].want = want;
+      f[side].error = "";
+      const list = $(`files-${side}-list`);
+      if (list) list.innerHTML = `<div class="hint">reading ${esc(f[side].device)}…</div>`;
+      try {
+        const view = await api(`/v1/linuxmice/files?${new URLSearchParams({ device: f[side].device, path: f[side].path, refresh: "1" })}`);
+        if (f[side].want !== want) return;
+        if (!view.data) throw new Error((view.error || "no answer").split("\n").filter(Boolean).pop());
+        f[side].data = view.data;
+        f[side].path = view.data.path;
+      } catch (error) {
+        if (f[side].want !== want) return;
+        f[side].data = null;
+        f[side].error = error.message;
+      }
+      if (state.tab === "files") filesShow(side);
+    }
+    function filesShow(side) {
+      const f = filesState();
+      const list = $(`files-${side}-list`);
+      if (!list) return;
+      const input = $(`files-${side}-path`);
+      if (input && document.activeElement !== input) input.value = f[side].path;
+      const d = f[side].data;
+      if (!d) { list.innerHTML = `<div class="hint">${esc(f[side].error || "loading…")}</div>`; filesSummary(); return; }
+      const when = (t) => t ? new Date(t * 1000).toLocaleDateString(undefined, { year: "2-digit", month: "short", day: "numeric" }) : "";
+      const rows = d.entries.filter((e) => f.hidden || !e.name.startsWith("."));
+      list.innerHTML = rows.length ? `<table><tbody>${rows.map((e) => {
+        const cls = [e.folder ? "folder" : "file", side === "from" && f.picked.has(e.path) ? "picked" : "", side === "to" && !e.folder ? "dim" : ""].join(" ");
+        const pick = side === "from" ? `<td><input type="checkbox" data-pick="${esc(e.path)}" ${f.picked.has(e.path) ? "checked" : ""} aria-label="Bring ${esc(e.name)}"></td>` : "";
+        return `<tr class="${cls}" data-path="${esc(e.path)}" data-folder="${e.folder ? 1 : 0}">${pick}<td class="n" title="${esc(e.name)}">${esc(e.name)}</td><td class="s">${e.folder ? "" : bytes(e.bytes)}</td><td class="d">${esc(when(e.modified))}</td></tr>`;
+      }).join("")}</tbody></table>` : `<div class="hint">This folder is empty.</div>`;
+      filesSummary();
+    }
+    function filesClick(side, event) {
+      const f = filesState();
+      const row = event.target.closest("tr[data-path]");
+      if (!row || f.busy) return;
+      const path = row.dataset.path;
+      const box = event.target.closest("input[data-pick]");
+      if (side === "from" && (box || row.dataset.folder !== "1")) {
+        // A tick, or a click on a file, picks it.
+        if (f.picked.has(path)) f.picked.delete(path); else f.picked.add(path);
+        filesShow("from");
+        return;
+      }
+      if (row.dataset.folder === "1") { f[side].path = path; if (side === "from") f.picked.clear(); filesLoad(side); }
+    }
+    function filesSummary() {
+      const f = filesState();
+      const button = $("filesBring");
+      if (!button) return;
+      const n = f.picked.size;
+      const to = f.to.data ? `${f.to.device}:${f.to.data.path}` : "";
+      button.disabled = f.busy || !n || !to || !state.caps?.actions_enabled;
+      button.textContent = f.busy ? "Bringing…" : n > 1 ? `Bring ${n} →` : "Bring →";
+      $("filesWhat").innerHTML = !state.caps?.actions_enabled ? "Changes are switched off on this node." : !n ? "Tick files or folders on the left." : !to ? "Open the folder they go into on the right." : `${n === 1 ? esc([...f.picked][0].split("/").pop()) : `${n} items`} from <b>${esc(f.from.device)}</b> into <code>${esc(to)}</code>`;
+    }
+    function filesBring() {
+      const f = filesState();
+      const items = [...f.picked];
+      const to = `${f.to.device}:${f.to.data.path}`;
+      const commands = items.map((p) => `lmice files copy "${f.from.device}:${p}" "${to}"`);
+      askConfirm(commands.join("\n$ "), `Copies ${items.length === 1 ? "it" : `these ${items.length}`} over the fleet's SSH${f.from.device !== state.caps?.device && f.to.device !== state.caps?.device ? `, through ${state.caps?.device}` : ""}. Nothing on ${f.to.device} is overwritten.`, async () => {
+        f.busy = true; filesSummary();
+        ["filesConduit", "filesConduit2"].forEach((id) => $(id)?.classList.add("live"));
+        for (const p of items) {
+          const started = Date.now();
+          let line;
+          try {
+            const job = await startJob({ kind: "files-copy", a: `${f.from.device}:${p}`, b: to });
+            const r = job.view?.data;
+            line = r?.copied ? `${pill("ok")} <b>${esc(p.split("/").pop())}</b> → <code>${esc(r.to_device)}:${esc(r.to_path)}</code> <span class="muted">${esc(r.detail)} · ${Math.round((Date.now() - started) / 1000)} s${r.route !== "direct" ? ` · ${esc(r.route)}` : ""}</span>`
+              : `${pill("failed")} <b>${esc(p.split("/").pop())}</b>: ${esc((job.view?.error || "no answer").split("\n").filter(Boolean).pop())}`;
+            if (r?.copied) f.picked.delete(p);
+          } catch (error) { line = `${pill("failed")} <b>${esc(p.split("/").pop())}</b>: ${esc(error.message)}`; }
+          f.log.unshift(line);
+          f.log = f.log.slice(0, 30);
+          if (state.tab === "files") filesShowLog();
+        }
+        f.busy = false;
+        ["filesConduit", "filesConduit2"].forEach((id) => $(id)?.classList.remove("live"));
+        if (state.tab === "files") { filesShow("from"); filesLoad("to"); }
+      });
+    }
+    function filesShowLog() {
+      const f = filesState();
+      const log = $("filesLog");
+      if (!log) return;
+      log.hidden = !f.log.length;
+      log.innerHTML = `<h3>Brought</h3>${f.log.map((l) => `<p>${l}</p>`).join("")}`;
     }
 
     async function planRemove() {
@@ -1850,6 +2012,7 @@
       agents: ["Agents", "Claude sessions on this machine: Remote Control, their browser and their sandboxed desktops."],
       org: ["Organization", "Your organization's devices against its policies, who can sign in, and every change made through LinuxMice."],
       vault: ["Vault", "Passwords and tokens for you and your agents, in vaults with their own keys."],
+      files: ["Files", "Bring a file or folder from one device to another. Pick what to bring on the left, the folder it goes into on the right. Nothing is overwritten: a name already there gets (2)."],
       flows: ["Flows", "Everything that moves data between your devices and services: what, from where to where, how, why, and when it last ran. Nothing else copies anything on its own."],
       browsers: ["Browsers", "The browsers on each device, their profiles and extensions, and your own extensions in each profile. Add one to a profile from here."],
     };
