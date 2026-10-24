@@ -208,6 +208,28 @@ func TestLinuxMiceAgentJobsMapToWords(t *testing.T) {
 	}
 }
 
+func TestLinuxMiceGuardJobsMapToWords(t *testing.T) {
+	args, changes, err := linuxmiceJobArgs(LinuxMiceJobRequest{Kind: "guard-add", A: "~/Documents/clients/acme", B: "selfhosted", Remotes: []string{"github.com/acme/"}, Protected: []string{"main", "development"}})
+	if err != nil || !changes || strings.Join(args, " ") != "--format json guard add ~/Documents/clients/acme --tag selfhosted --remote github.com/acme/ --protect main --protect development" {
+		t.Fatalf("guard-add: got %q changes=%v err=%v", args, changes, err)
+	}
+	args, changes, err = linuxmiceJobArgs(LinuxMiceJobRequest{Kind: "guard-scan"})
+	if err != nil || changes || strings.Join(args, " ") != "--format json guard scan" {
+		t.Fatalf("guard-scan: got %q changes=%v err=%v", args, changes, err)
+	}
+	for _, bad := range []LinuxMiceJobRequest{
+		{Kind: "guard-add", A: "relative/path"},
+		{Kind: "guard-add", A: "~/x/../etc"},
+		{Kind: "guard-add", A: "~/x", B: "public"},
+		{Kind: "guard-add", A: "~/x", Remotes: []string{"--bad"}},
+		{Kind: "guard-add", A: "~/x", Protected: []string{"main; rm"}},
+	} {
+		if _, _, err := linuxmiceJobArgs(bad); err == nil {
+			t.Fatalf("accepted %+v", bad)
+		}
+	}
+}
+
 func TestLinuxMiceReleaseJobsMapToWords(t *testing.T) {
 	for kind, want := range map[string]string{
 		"tool-publish": "tools publish dale --yes --format json",

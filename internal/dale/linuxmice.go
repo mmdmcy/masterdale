@@ -74,6 +74,7 @@ var linuxmiceViews = map[string][]string{
 	"apps":         {"app", "list", "--format", "json"},
 	"identity":     {"identity", "--format", "json"},
 	"fleetdiff":    {"fleet", "diff", "--format", "json"},
+	"guard":        {"guard", "--format", "json"},
 	// Not served as a view: names this node for the page.
 	"integrations-local": {"integrations", "--format", "json"},
 }
@@ -101,6 +102,10 @@ var (
 	linuxmiceUpstreamPattern = regexp.MustCompile(`^http://[0-9]{1,3}(\.[0-9]{1,3}){3}:[0-9]{1,5}$`)
 	// A folder or file for lmice files: ~, ~/..., /... or C:/... (Windows).
 	linuxmiceFilesPathPattern = regexp.MustCompile(`^(~|~/[^\x00-\x1f]{0,1000}|/[^\x00-\x1f]{0,1000}|[A-Za-z]:/[^\x00-\x1f]{0,1000})$`)
+	// Part of a remote URL for lmice guard (github.com/Org/), and a branch name.
+	linuxmiceRemotePartPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9.:/@_-]{0,200}$`)
+	linuxmiceBranchPattern     = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._/-]{0,100}$`)
+	linuxmiceGuardTags         = map[string]bool{"": true, "selfhosted": true, "nowhere": true}
 )
 
 type LinuxMiceView struct {
@@ -133,6 +138,10 @@ type LinuxMiceJobRequest struct {
 	B      string `json:"b,omitempty"`
 	Device string `json:"device,omitempty"`
 	ID     string `json:"id,omitempty"`
+	// guard-add: A is the folder, B the tag (selfhosted, nowhere or empty),
+	// Remotes parts of allowed remote URLs, Protected pull-request-only branches.
+	Remotes   []string `json:"remotes,omitempty"`
+	Protected []string `json:"protected,omitempty"`
 }
 
 type LinuxMiceJob struct {
@@ -581,6 +590,39 @@ func linuxmiceJobArgs(req LinuxMiceJobRequest) ([]string, bool, error) {
 		return []string{"--yes", "--format", "json", "browsers", "add", req.ID, "--device", req.Device, "--browser", req.A, "--profile", req.B}, true, nil
 	case "browsers-update":
 		return []string{"--yes", "--format", "json", "browsers", "update", "--fleet"}, true, nil
+	case "guard-install":
+		return []string{"--format", "json", "guard", "install"}, true, nil
+	case "guard-scan":
+		// Reads what already reached a remote; changes nothing.
+		return []string{"--format", "json", "guard", "scan"}, false, nil
+	case "guard-add":
+		// A is the folder, B the tag; remotes and protected branches are lists.
+		if !linuxmicePathPattern.MatchString(req.A) || strings.Contains("/"+req.A+"/", "/../") {
+			return nil, false, errors.New("guard-add needs a folder (~/... or /...)")
+		}
+		if !linuxmiceGuardTags[req.B] {
+			return nil, false, errors.New("the tag is selfhosted, nowhere or empty")
+		}
+		if len(req.Remotes)+len(req.Protected) > 20 {
+			return nil, false, errors.New("at most 20 remotes and branches at a time")
+		}
+		args := []string{"--format", "json", "guard", "add", req.A}
+		if req.B != "" {
+			args = append(args, "--tag", req.B)
+		}
+		for _, remote := range req.Remotes {
+			if !linuxmiceRemotePartPattern.MatchString(remote) {
+				return nil, false, errors.New("a remote is part of a URL, like github.com/Org/")
+			}
+			args = append(args, "--remote", remote)
+		}
+		for _, branch := range req.Protected {
+			if !linuxmiceBranchPattern.MatchString(branch) {
+				return nil, false, errors.New("a protected branch is a branch name, like main")
+			}
+			args = append(args, "--protect", branch)
+		}
+		return args, true, nil
 	case "checkouts-update":
 		if req.Device == "" {
 			return []string{"--yes", "--format", "json", "checkouts", "update"}, true, nil
