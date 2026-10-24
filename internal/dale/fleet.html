@@ -1134,7 +1134,8 @@
       if (!d) { box.innerHTML = `<p class="muted">failed: ${esc(job.view?.error || job.state)}</p>`; return; }
       if (d.schema_version === "linuxmice.guard.v1" && "commits" in d) {
         const lines = [...(d.wrong_remotes || []).map((r) => `${pill("critical")} <span class="mono">${esc(r.path)}</span> pushes to ${esc(r.push_url || "?")}, which its folder does not allow`), ...(d.findings || []).map((f) => `${pill("critical")} <span class="mono">${esc(f.repository)}</span> ${esc(f.commit)} ${esc(f.place)}: ${esc(f.found)}`)];
-        box.innerHTML = `<p>Pushed since ${esc(d.since)}: ${d.commits} commit(s) in ${d.repositories} repositories. ${lines.length ? "" : pill("ok") + " nothing personal left."}</p>${lines.map((l) => `<div>${l}</div>`).join("")}`;
+        const since = /^@\d+$/.test(d.since) ? new Date(Number(d.since.slice(1)) * 1000).toLocaleString() : d.since;
+        box.innerHTML = `<p>Pushed since ${esc(since)}: ${d.commits} commit(s) in ${d.repositories} repositories. ${lines.length ? "" : pill("ok") + " nothing personal left."}</p>${lines.map((l) => `<div>${l}</div>`).join("")}`;
       }
     }
     function renderGithub(data) {
